@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
-use numpy::ndarray::{Array2, ArrayView2};
-use numpy::{PyArray2, PyReadonlyArray2, IntoPyArray};
+use numpy::ndarray::{Array2, ArrayView2, Array3, stack, Axis};
+use numpy::{PyArray2, PyReadonlyArray2, PyArray3, IntoPyArray};
 
 /// A Python module implemented in Rust. The name of this function must match
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
@@ -12,7 +12,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         10_f64 * &source
     }
 
-    fn euclidean_distance(input: ArrayView2<'_, f64>) -> Array2<f64> {
+    fn euclidean_transform(input: ArrayView2<'_, f64>) -> Array3<f64> {
         let shape = input.raw_dim();
         let rows = shape[0];
         let cols = shape[1];
@@ -30,13 +30,17 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let (mut xraw, mut yraw): (isize, isize);
         let (mut z, mut z2, mut z_min): (f64, f64, f64);
 
-        let mut output: Array2<f64> = input.map(
+        let mut distance: Array2<f64> = input.map(
             |z| if *z > 0.0 { 0.0 } else { f64::INFINITY }
+        );
+
+        let mut allocation: Array2<f64> = input.map(
+            |z| if *z > 0.0 { *z } else { f64::INFINITY }
         );
 
         for row in 0..rows {
             for col in 0..cols {
-                z = output[[row, col]];
+                z = distance[[row, col]];
                 if z != 0.0 {
                     z_min = f64::INFINITY;
                     which_cell = 0;
@@ -48,7 +52,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             x = xraw as usize;
                             y = yraw as usize;
 
-                            z2 = output[[y, x]];
+                            z2 = distance[[y, x]];
 
                             if z2 != f64::NAN {
                                 h = match i {
@@ -65,11 +69,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             }
 
                             if z_min < z {
-                                output[[row, col]] = z_min;
+                                distance[[row, col]] = z_min;
                                 x = (col as isize + dx[which_cell]) as usize;
                                 y = (row as isize + dy[which_cell]) as usize;
                                 rx[[row, col]] = rx[[y, x]] + gx[which_cell];
                                 ry[[row, col]] = ry[[y, x]] + gy[which_cell];
+                                allocation[[row, col]] = allocation[[y, x]];
                             }
                         }
                     }
@@ -79,7 +84,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         for row in (0..rows).rev() {
             for col in (0..cols).rev() {
-                z = output[[row, col]];
+                z = distance[[row, col]];
                 if z != 0.0 {
                     z_min = f64::INFINITY;
                     which_cell = 0;
@@ -91,7 +96,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             x = xraw as usize;
                             y = yraw as usize;
 
-                            z2 = output[[y, x]];
+                            z2 = distance[[y, x]];
 
                             if z2 != f64::NAN {
                                 h = match i {
@@ -108,11 +113,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             }
 
                             if z_min < z {
-                                output[[row, col]] = z_min;
+                                distance[[row, col]] = z_min;
                                 x = (col as isize + dx[which_cell]) as usize;
                                 y = (row as isize + dy[which_cell]) as usize;
                                 rx[[row, col]] = rx[[y, x]] + gx[which_cell];
                                 ry[[row, col]] = ry[[y, x]] + gy[which_cell];
+                                allocation[[row, col]] = allocation[[y, x]];
                             }
                         }
                     }
@@ -120,9 +126,9 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             }
         }
 
-        output.map_inplace(|x| *x = f64::sqrt(*x));
+        distance.map_inplace(|x| *x = f64::sqrt(*x));
 
-        return output;
+        stack(Axis(0), &[distance.view(), allocation.view()]).unwrap()
     }
 
     // wrapper of `rescale`
@@ -137,15 +143,15 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         result.into_pyarray(py)
     }
 
-    // wrapper of `euclideandistance`
+    // wrapper of `euclidean_transform`
     #[pyfn(m)]
-    #[pyo3(name = "euclidean_distance")]
+    #[pyo3(name = "euclidean_transform")]
     fn euclidean_distance_py<'py>(
         py: Python<'py>,
         source: PyReadonlyArray2<'_, f64>
-    ) -> &'py PyArray2<f64> {
+    ) -> &'py PyArray3<f64> {
         let source = source.as_array();
-        let result = euclidean_distance(source);
+        let result = euclidean_transform(source);
         result.into_pyarray(py)
     }
 
