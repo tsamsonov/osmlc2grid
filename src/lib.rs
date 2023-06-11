@@ -1,6 +1,8 @@
 use pyo3::prelude::*;
-use numpy::ndarray::{Array2, ArrayView2, Array3, stack, Axis};
-use numpy::{PyArray2, PyReadonlyArray2, PyArray3, IntoPyArray};
+use numpy::ndarray::{Array2, ArrayView2, Array3, ArrayView3, stack, Axis};
+use numpy::{PyArray2, PyReadonlyArray2, PyArray3, PyReadonlyArray3, IntoPyArray};
+use std::collections::{BinaryHeap};
+use ordered_float::OrderedFloat;
 
 /// A Python module implemented in Rust. The name of this function must match
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
@@ -12,7 +14,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         10_f64 * &source
     }
 
-    fn euclidean_transform(input: ArrayView2<'_, f64>) -> Array3<f64> {
+    fn euclidean_transform(input: ArrayView2<'_, f64>, cellsize: f64) -> Array3<f64> {
         let shape = input.raw_dim();
         let rows = shape[0];
         let cols = shape[1];
@@ -127,10 +129,81 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         }
 
         distance.map_inplace(|x| *x = f64::sqrt(*x));
+        distance *= cellsize;
 
         stack(Axis(0), &[distance.view(), allocation.view()]).unwrap()
     }
 
+    fn euclidean_width(input: ArrayView3<'_, f64>, cellsize: f64) -> Array3<f64> {
+        let shape = input.raw_dim();
+        let nrow = shape[1];
+        let ncol = shape[2];
+        let mut output = Array3::<f64>::zeros((4, nrow, ncol));
+
+        let (mut hsum, mut hmean, mut hw, mut radius): (f64, f64, f64, f64);
+        let (mut w, mut ik, mut jl): (isize, isize, isize);
+        let (mut uik, mut ujl): (usize, usize);
+
+        let mut n: usize;
+
+        let mut queue = BinaryHeap::new();
+
+        for i in 0..nrow {
+            for j in 0..ncol {
+                if input[[0, i, j]] > 0.0 {
+                    queue.push((OrderedFloat(input[[0, i, j]]), i, j));
+                }
+            }
+        }
+
+        while queue.len() > 0 {
+            let (ord_radius, i, j) = queue.pop().unwrap();
+            let mut covered: Vec<(usize, usize)> = Vec::new();
+
+            radius = f64::from(ord_radius);
+
+            w = (radius / cellsize).floor() as isize;
+
+            hsum = 0.0;
+            n = 0;
+
+            for k in (-w+1)..w {
+                for l in (-w+1)..w {
+                    if k*k + l*l > w*w {
+                        continue;
+                    }
+                    ik = i as isize + k;
+                    jl = j as isize + l;
+
+                    if ik < 0 || ik >= nrow as isize || jl < 0 || jl >= ncol as isize {
+                        continue;
+                    }
+
+                    uik = ik as usize;
+                    ujl = jl as usize;
+
+                    if output[[1, uik, ujl]] < 2.0 * radius {
+                        covered.push((uik, ujl));
+                    }
+
+                    hsum += input[[1, uik, ujl]];
+                    n += 1;
+                }
+            }
+            if covered.len() > 0 {
+                hmean = hsum / n as f64;
+                hw = 0.5 * hmean / radius;
+                for (uik, ujl) in covered {
+                    output[[0, uik, ujl]] = (i * ncol + j) as f64;
+                    output[[1, uik, ujl]] = 2.0 * radius;
+                    output[[2, uik, ujl]] = hmean;
+                    output[[3, uik, ujl]] = hw;
+                }
+            }
+        }
+
+        return output;
+    }
     // wrapper of `rescale`
     #[pyfn(m)]
     #[pyo3(name = "rescale")]
@@ -148,10 +221,24 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     #[pyo3(name = "euclidean_transform")]
     fn euclidean_distance_py<'py>(
         py: Python<'py>,
-        source: PyReadonlyArray2<'_, f64>
+        source: PyReadonlyArray2<'_, f64>,
+        cellsize: f64
     ) -> &'py PyArray3<f64> {
         let source = source.as_array();
-        let result = euclidean_transform(source);
+        let result = euclidean_transform(source, cellsize);
+        result.into_pyarray(py)
+    }
+
+    // wrapper of `euclidean_width`
+    #[pyfn(m)]
+    #[pyo3(name = "euclidean_width")]
+    fn euclidean_width_py<'py>(
+        py: Python<'py>,
+        source: PyReadonlyArray3<'_, f64>,
+        cellsize: f64
+    ) -> &'py PyArray3<f64> {
+        let source = source.as_array();
+        let result = euclidean_width(source, cellsize);
         result.into_pyarray(py)
     }
 

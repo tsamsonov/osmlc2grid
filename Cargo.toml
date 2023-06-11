@@ -10,4 +10,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 numpy = "0.18.0"
+ordered-float = "3.7.0"
 pyo3 = "0.18.3"
