@@ -224,8 +224,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
     fn euclidean_width(input: ArrayView2<'_, f64>, cellsize: f64) -> Array2<f64> {
         let shape = input.raw_dim();
-        let nrow = shape[1];
-        let ncol = shape[2];
+        let nrow = shape[0];
+        let ncol = shape[1];
         let mut output = Array2::<f64>::zeros((nrow, ncol));
 
         let dist = euclidean_distance(input, cellsize);

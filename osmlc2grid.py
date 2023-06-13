@@ -22,13 +22,13 @@ array = src.read(1).astype('float64')
 #     dst.write(euc, indexes = 1)
 #
 #
-# start = time.time()
-# euc = rs.euclidean_allocation(array, 5.0)
-# end = time.time()
-# print(end - start)
-#
-# with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/alloc_small.tif', 'w', **profile) as dst:
-#     dst.write(euc, indexes = 1)
+start = time.time()
+euc = rs.euclidean_width(array, 5.0)
+end = time.time()
+print(end - start)
+
+with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/width_small.tif', 'w', **profile) as dst:
+    dst.write(euc, indexes = 1)
 
 # pyplot.imshow(euc[0, :, :], cmap='bone')
 # pyplot.show()
