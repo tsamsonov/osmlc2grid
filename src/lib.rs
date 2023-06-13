@@ -4,6 +4,7 @@ use numpy::{PyArray2, PyReadonlyArray2, PyArray3, PyReadonlyArray3, IntoPyArray}
 use std::collections::{BinaryHeap};
 use ordered_float::OrderedFloat;
 use std::thread;
+use std::sync::mpsc;
 use num_cpus;
 
 /// A Python module implemented in Rust. The name of this function must match
@@ -136,6 +137,68 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         stack(Axis(0), &[distance.view(), allocation.view()]).unwrap()
     }
 
+    fn euclidean_centrality(input: ArrayView3<'_, f64>, cellsize: f64) -> Array3<f64> {
+        let shape = input.raw_dim();
+        let nrow = shape[1];
+        let ncol = shape[2];
+        let di: [isize; 8] = [-1, -1, 0, 1, 1, 1, 0, -1];
+        let dj: [isize; 8] = [0, -1, -1, -1, 0, 1, 1, 1];
+
+        let arcinput = input.to_shared();
+
+        let nproc = num_cpus::get_physical();
+
+        let mut tasks = Vec::new();
+        let (tx, rx) = mpsc::channel();
+
+        for proc in 0..nproc {
+            let input_ref = arcinput.clone();
+            let tx1 = tx.clone();
+
+            tasks.push(thread::spawn(move || {
+
+                let (mut ik, mut jk): (isize, isize);
+                let (mut uik, mut ujk): (usize, usize);
+
+                for i in (0..nrow).filter(|r| r % nproc == proc) {
+                    let mut data = vec![0.0; ncol];
+                    for j in 0..ncol {
+                        for k in 0..8 {
+                            ik = i as isize + di[k];
+                            jk = j as isize + dj[k];
+                            if ik < 0 || ik >= nrow as isize || jk < 0 || jk >= ncol as isize {
+                                continue;
+                            }
+
+                            uik = ik as usize;
+                            ujk = jk as usize;
+
+                            if input_ref[[1, i, j]] != f64::NAN {
+                                if input_ref[[1, i, j]] != input_ref[[1, uik, ujk]] {
+                                    data[j] = 1.0;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    tx1.send((i, data)).unwrap();
+                }
+            }));
+        }
+
+        let mut borders = Array2::<f64>::zeros((nrow, ncol));
+
+        for row in 0..nrow {
+            let data  = rx.recv().expect("Error receiving data from thread");
+            for col in 0..ncol {
+                borders[[data.0, col]] = data.1[col];
+            }
+        }
+
+        return output;
+    }
+
     fn euclidean_width(input: ArrayView3<'_, f64>, cellsize: f64) -> Array3<f64> {
         let shape = input.raw_dim();
         let nrow = shape[1];
@@ -216,8 +279,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let arcinput = input.to_shared();
 
         let nproc = num_cpus::get_physical();
-
-        println!("CPUS: {}", nproc);
 
         let mut tasks = Vec::new();
 
@@ -330,6 +391,19 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     ) -> &'py PyArray3<f64> {
         let source = source.as_array();
         let result = euclidean_transform(source, cellsize);
+        result.into_pyarray(py)
+    }
+
+    // wrapper of `euclidean_width`
+    #[pyfn(m)]
+    #[pyo3(name = "euclidean_centrality")]
+    fn euclidean_centrality_py<'py>(
+        py: Python<'py>,
+        source: PyReadonlyArray3<'_, f64>,
+        cellsize: f64
+    ) -> &'py PyArray3<f64> {
+        let source = source.as_array();
+        let result = euclidean_centrality(source, cellsize);
         result.into_pyarray(py)
     }
 
