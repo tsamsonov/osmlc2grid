@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use numpy::ndarray::{Array2, ArrayView2, Array3, ArrayView3, stack, Axis};
+use numpy::ndarray::{Array2, ArrayView2, Array3, ArrayView3};
 use numpy::{PyArray2, PyReadonlyArray2, PyArray3, PyReadonlyArray3, IntoPyArray};
 use std::collections::{BinaryHeap};
 use ordered_float::OrderedFloat;
@@ -7,6 +7,10 @@ use std::thread;
 use std::sync::mpsc;
 use num_cpus;
 
+enum EuclideanTransform {
+    DISTANCE,
+    ALLOCATION
+}
 /// A Python module implemented in Rust. The name of this function must match
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
 /// import the module.
@@ -17,7 +21,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         10_f64 * &source
     }
 
-    fn euclidean_transform(input: ArrayView2<'_, f64>, cellsize: f64) -> Array3<f64> {
+    fn euclidean_transform(input: ArrayView2<'_, f64>, cellsize: f64, transform: EuclideanTransform) -> Array2<f64> {
         let shape = input.raw_dim();
         let rows = shape[0];
         let cols = shape[1];
@@ -134,17 +138,25 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         distance.map_inplace(|x| *x = f64::sqrt(*x));
         distance *= cellsize;
 
-        stack(Axis(0), &[distance.view(), allocation.view()]).unwrap()
+        match transform {
+            EuclideanTransform::DISTANCE => distance,
+            _ => allocation
+        }
     }
 
-    fn euclidean_centrality(input: ArrayView3<'_, f64>, cellsize: f64) -> Array3<f64> {
+    fn euclidean_centrality(input: ArrayView2<'_, f64>, cellsize: f64) -> Array2<f64> {
+        let distance =
+            euclidean_transform(input, cellsize, EuclideanTransform::DISTANCE);
+        let allocation=
+            euclidean_transform(input, cellsize, EuclideanTransform::ALLOCATION);
+
         let shape = input.raw_dim();
-        let nrow = shape[1];
-        let ncol = shape[2];
+        let nrow = shape[0];
+        let ncol = shape[1];
         let di: [isize; 8] = [-1, -1, 0, 1, 1, 1, 0, -1];
         let dj: [isize; 8] = [0, -1, -1, -1, 0, 1, 1, 1];
 
-        let arcinput = input.to_shared();
+        let arcallocation = allocation.to_shared();
 
         let nproc = num_cpus::get_physical();
 
@@ -152,7 +164,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let (tx, rx) = mpsc::channel();
 
         for proc in 0..nproc {
-            let input_ref = arcinput.clone();
+            let input_ref = arcallocation.clone();
             let tx1 = tx.clone();
 
             tasks.push(thread::spawn(move || {
@@ -173,8 +185,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             uik = ik as usize;
                             ujk = jk as usize;
 
-                            if input_ref[[1, i, j]] != f64::NAN {
-                                if input_ref[[1, i, j]] != input_ref[[1, uik, ujk]] {
+                            if input_ref[[i, j]] != f64::NAN {
+                                if input_ref[[i, j]] != input_ref[[uik, ujk]] {
                                     data[j] = 1.0;
                                     break;
                                 }
@@ -189,14 +201,17 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         let mut borders = Array2::<f64>::zeros((nrow, ncol));
 
-        for row in 0..nrow {
+        for _ in 0..nrow {
             let data  = rx.recv().expect("Error receiving data from thread");
             for col in 0..ncol {
                 borders[[data.0, col]] = data.1[col];
             }
         }
 
-        return output;
+        let distance1 =
+            euclidean_transform(borders.view(), cellsize, EuclideanTransform::DISTANCE);
+
+        return &distance / (&distance + &distance1);
     }
 
     fn euclidean_width(input: ArrayView3<'_, f64>, cellsize: f64) -> Array3<f64> {
@@ -381,16 +396,29 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         result.into_pyarray(py)
     }
 
-    // wrapper of `euclidean_transform`
+    // wrapper of `euclidean_distance
     #[pyfn(m)]
-    #[pyo3(name = "euclidean_transform")]
+    #[pyo3(name = "euclidean_distance")]
     fn euclidean_distance_py<'py>(
         py: Python<'py>,
         source: PyReadonlyArray2<'_, f64>,
         cellsize: f64
-    ) -> &'py PyArray3<f64> {
+    ) -> &'py PyArray2<f64> {
         let source = source.as_array();
-        let result = euclidean_transform(source, cellsize);
+        let result = euclidean_transform(source, cellsize, EuclideanTransform::DISTANCE);
+        result.into_pyarray(py)
+    }
+
+    // wrapper of `euclidean_allocation
+    #[pyfn(m)]
+    #[pyo3(name = "euclidean_allocation")]
+    fn euclidean_allocation_py<'py>(
+        py: Python<'py>,
+        source: PyReadonlyArray2<'_, f64>,
+        cellsize: f64
+    ) -> &'py PyArray2<f64> {
+        let source = source.as_array();
+        let result = euclidean_transform(source, cellsize, EuclideanTransform::ALLOCATION);
         result.into_pyarray(py)
     }
 
@@ -399,9 +427,9 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     #[pyo3(name = "euclidean_centrality")]
     fn euclidean_centrality_py<'py>(
         py: Python<'py>,
-        source: PyReadonlyArray3<'_, f64>,
+        source: PyReadonlyArray2<'_, f64>,
         cellsize: f64
-    ) -> &'py PyArray3<f64> {
+    ) -> &'py PyArray2<f64> {
         let source = source.as_array();
         let result = euclidean_centrality(source, cellsize);
         result.into_pyarray(py)
