@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
-use numpy::ndarray::{Array2, ArrayView2, Array3, ArrayView3};
-use numpy::{PyArray2, PyReadonlyArray2, PyArray3, PyReadonlyArray3, IntoPyArray};
+use numpy::ndarray::{Array2, ArrayView2, Array3, Axis};
+use numpy::{PyArray2, PyReadonlyArray2, PyArray3, IntoPyArray};
 use std::collections::{BinaryHeap};
 use ordered_float::OrderedFloat;
 use std::thread;
@@ -144,6 +144,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         }
     }
 
+    fn euclidean_distance(input: ArrayView2<'_, f64>, cellsize: f64) -> Array2<f64> {
+        euclidean_transform(input, cellsize, EuclideanTransform::DISTANCE)
+    }
+
+    fn euclidean_allocation(input: ArrayView2<'_, f64>, cellsize: f64) -> Array2<f64> {
+        euclidean_transform(input, cellsize, EuclideanTransform::ALLOCATION)
+    }
+
     fn euclidean_centrality(input: ArrayView2<'_, f64>, cellsize: f64) -> Array2<f64> {
         let distance =
             euclidean_transform(input, cellsize, EuclideanTransform::DISTANCE);
@@ -153,8 +161,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let shape = input.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
-        let di: [isize; 8] = [-1, -1, 0, 1, 1, 1, 0, -1];
-        let dj: [isize; 8] = [0, -1, -1, -1, 0, 1, 1, 1];
+        let di: [isize; 8] = [-1, -1,  0,  1, 1, 1, 0, -1];
+        let dj: [isize; 8] = [ 0, -1, -1, -1, 0, 1, 1,  1];
 
         let arcallocation = allocation.to_shared();
 
@@ -214,84 +222,16 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return &distance / (&distance + &distance1);
     }
 
-    fn euclidean_width(input: ArrayView3<'_, f64>, cellsize: f64) -> Array3<f64> {
+    fn euclidean_width(input: ArrayView2<'_, f64>, cellsize: f64) -> Array2<f64> {
         let shape = input.raw_dim();
         let nrow = shape[1];
         let ncol = shape[2];
-        let mut output = Array3::<f64>::zeros((4, nrow, ncol));
+        let mut output = Array2::<f64>::zeros((nrow, ncol));
 
-        let (mut hsum, mut hmean, mut hw, mut radius): (f64, f64, f64, f64);
-        let (mut w, mut ik, mut jl): (isize, isize, isize);
-        let (mut uik, mut ujl): (usize, usize);
-        let mut n: usize;
-
-        let mut queue = BinaryHeap::new();
-
-        for i in 0..nrow {
-            for j in 0..ncol {
-                if input[[0, i, j]] > 0.0 {
-                    queue.push((OrderedFloat(input[[0, i, j]]), i, j));
-                }
-            }
-        }
-
-        while queue.len() > 0 {
-            let (ord_radius, i, j) = queue.pop().unwrap();
-            let mut covered: Vec<(usize, usize)> = Vec::new();
-
-            radius = f64::from(ord_radius);
-
-            w = (radius / cellsize).floor() as isize;
-
-            hsum = 0.0;
-            n = 0;
-
-            for k in (-w+1)..w {
-                for l in (-w+1)..w {
-                    if k*k + l*l > w*w {
-                        continue;
-                    }
-                    ik = i as isize + k;
-                    jl = j as isize + l;
-
-                    if ik < 0 || ik >= nrow as isize || jl < 0 || jl >= ncol as isize {
-                        continue;
-                    }
-
-                    uik = ik as usize;
-                    ujl = jl as usize;
-
-                    if output[[1, uik, ujl]] < 2.0 * radius {
-                        covered.push((uik, ujl));
-                    }
-
-                    hsum += input[[1, uik, ujl]];
-                    n += 1;
-                }
-            }
-            if covered.len() > 0 {
-                hmean = hsum / n as f64;
-                hw = 0.5 * hmean / radius;
-                for (uik, ujl) in covered {
-                    output[[0, uik, ujl]] = (i * ncol + j) as f64;
-                    output[[1, uik, ujl]] = 2.0 * radius;
-                    output[[2, uik, ujl]] = hmean;
-                    output[[3, uik, ujl]] = hw;
-                }
-            }
-        }
-
-        return output;
-    }
-
-    fn euclidean_width_parallel(input: ArrayView3<'_, f64>, cellsize: f64) -> Array3<f64> {
-        let shape = input.raw_dim();
-        let nrow = shape[1];
-        let ncol = shape[2];
-        let mut output = Array3::<f64>::zeros((4, nrow, ncol));
+        let dist = euclidean_distance(input, cellsize);
 
         let arcoutput = output.to_shared();
-        let arcinput = input.to_shared();
+        let arcinput = dist.to_shared();
 
         let nproc = num_cpus::get_physical();
 
@@ -300,6 +240,91 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         for proc in 0..nproc {
             let mut output_ref = arcoutput.clone();
             let input_ref = arcinput.clone();
+
+            tasks.push(thread::spawn(move || {
+                let mut radius: f64;
+                let (mut w, mut ik, mut jl): (isize, isize, isize);
+                let (mut uik, mut ujl): (usize, usize);
+
+                let mut queue = BinaryHeap::new();
+
+                for i in (0..nrow).filter(|r| r % nproc == proc) {
+                    for j in 0..ncol {
+                        if input_ref[[i, j]] > 0.0 {
+                            queue.push((OrderedFloat(input_ref[[i, j]]), i, j));
+                        }
+                    }
+                }
+
+                while queue.len() > 0 {
+                    let (ord_radius, i, j) = queue.pop().unwrap();
+
+                    radius = f64::from(ord_radius);
+
+                    w = (radius / cellsize).floor() as isize;
+
+                    for k in (-w+1)..w {
+                        for l in (-w+1)..w {
+                            if k*k + l*l > w*w {
+                                continue;
+                            }
+                            ik = i as isize + k;
+                            jl = j as isize + l;
+
+                            if ik < 0 || ik >= nrow as isize || jl < 0 || jl >= ncol as isize {
+                                continue;
+                            }
+
+                            uik = ik as usize;
+                            ujl = jl as usize;
+
+                            if output_ref[[uik, ujl]] < 2.0 * radius {
+                                output_ref[[uik, ujl]] = 2.0 * radius;
+                            }
+                        }
+                    }
+                }
+
+                return output_ref;
+            }))
+        }
+
+        for task in tasks {
+            let add = task.join().unwrap();
+            for i in 0..nrow {
+                for j in 0..ncol {
+                    if add[[i, j]] > output[[i, j]] {
+                        output[[i, j]] = add[[i, j]] ;
+                    }
+                }
+            }
+        }
+
+        return output;
+    }
+
+    fn euclidean_width_params(input: ArrayView2<'_, f64>, cellsize: f64) -> Array3<f64> {
+        let shape = input.raw_dim();
+        let nrow = shape[0];
+        let ncol = shape[1];
+
+        let mut output = Array3::<f64>::zeros((4, nrow, ncol));
+        let arcoutput = output.to_shared();
+
+        let distance = euclidean_distance(input, cellsize);
+        let height = euclidean_allocation(input, cellsize);
+
+        let arcdistance = distance.to_shared();
+        let archeight = height.to_shared();
+
+        let nproc = num_cpus::get_physical();
+
+        let mut tasks = Vec::new();
+
+        for proc in 0..nproc {
+            let mut output_ref = arcoutput.clone();
+            let distance_ref = arcdistance.clone();
+            let height_ref = archeight.clone();
 
             tasks.push(thread::spawn(move || {
                 let (mut hsum, mut hmean, mut hw, mut radius): (f64, f64, f64, f64);
@@ -311,8 +336,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                 for i in (0..nrow).filter(|r| r % nproc == proc) {
                     for j in 0..ncol {
-                        if input_ref[[0, i, j]] > 0.0 {
-                            queue.push((OrderedFloat(input_ref[[0, i, j]]), i, j));
+                        if distance_ref[[i, j]] > 0.0 {
+                            queue.push((OrderedFloat(distance_ref[[i, j]]), i, j));
                         }
                     }
                 }
@@ -347,7 +372,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                                 covered.push((uik, ujl));
                             }
 
-                            hsum += input_ref[[1, uik, ujl]];
+                            hsum += height_ref[[uik, ujl]];
                             n += 1;
                         }
                     }
@@ -381,7 +406,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             }
         }
 
-        return output;
+        output.push(Axis(0), distance.view()).unwrap();
+        output.push(Axis(0), height.view()).unwrap();
+
+        return output
     }
 
     // wrapper of `rescale`
@@ -405,7 +433,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         cellsize: f64
     ) -> &'py PyArray2<f64> {
         let source = source.as_array();
-        let result = euclidean_transform(source, cellsize, EuclideanTransform::DISTANCE);
+        let result = euclidean_distance(source, cellsize);
         result.into_pyarray(py)
     }
 
@@ -418,7 +446,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         cellsize: f64
     ) -> &'py PyArray2<f64> {
         let source = source.as_array();
-        let result = euclidean_transform(source, cellsize, EuclideanTransform::ALLOCATION);
+        let result = euclidean_allocation(source, cellsize);
         result.into_pyarray(py)
     }
 
@@ -440,26 +468,27 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     #[pyo3(name = "euclidean_width")]
     fn euclidean_width_py<'py>(
         py: Python<'py>,
-        source: PyReadonlyArray3<'_, f64>,
+        source: PyReadonlyArray2<'_, f64>,
         cellsize: f64
-    ) -> &'py PyArray3<f64> {
+    ) -> &'py PyArray2<f64> {
         let source = source.as_array();
         let result = euclidean_width(source, cellsize);
         result.into_pyarray(py)
     }
 
-    // wrapper of `euclidean_width`
+    // wrapper of `euclidean_width_params`
     #[pyfn(m)]
-    #[pyo3(name = "euclidean_width_parallel")]
-    fn euclidean_width_parallel_py<'py>(
+    #[pyo3(name = "euclidean_width_params")]
+    fn euclidean_width_params_py<'py>(
         py: Python<'py>,
-        source: PyReadonlyArray3<'_, f64>,
+        source: PyReadonlyArray2<'_, f64>,
         cellsize: f64
     ) -> &'py PyArray3<f64> {
         let source = source.as_array();
-        let result = euclidean_width_parallel(source, cellsize);
+        let result = euclidean_width_params(source, cellsize);
         result.into_pyarray(py)
     }
+
 
     Ok(())
 }
