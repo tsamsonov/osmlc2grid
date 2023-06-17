@@ -1,5 +1,6 @@
+use std::cmp::{max, min};
 use pyo3::prelude::*;
-use numpy::ndarray::{Array2, ArrayView2, Array3, Axis};
+use numpy::ndarray::{s, Array2, ArrayView2, Array3, Axis};
 use numpy::{PyArray2, PyReadonlyArray2, PyArray3, IntoPyArray};
 use std::collections::{BinaryHeap};
 use ordered_float::OrderedFloat;
@@ -228,10 +229,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let ncol = shape[1];
         let mut output = Array2::<f64>::zeros((nrow, ncol));
 
-        let dist = euclidean_distance(input, cellsize);
-
         let arcoutput = output.to_shared();
-        let arcinput = dist.to_shared();
+        let arcinput = input.to_shared();
 
         let nproc = num_cpus::get_physical();
 
@@ -297,6 +296,96 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         output[[i, j]] = add[[i, j]] ;
                     }
                 }
+            }
+        }
+
+        return output;
+    }
+
+    fn euclidean_width_split(input: ArrayView2<'_, f64>, cellsize: f64, rows: usize, cols: usize) -> Array2<f64> {
+        let shape = input.raw_dim();
+        let nrow = shape[0];
+        let ncol = shape[1];
+        let mut output = Array2::<f64>::zeros((nrow, ncol));
+
+        let drow = nrow / rows;
+        let dcol = ncol / cols;
+
+        let (mut row1, mut row2, mut col1, mut col2): (usize, usize, usize, usize);
+        let (mut rowmin, mut colmin, mut rowmax, mut colmax, mut delta, mut radius):
+            (isize, isize, isize, isize, isize, isize);
+
+        let mut slices = Array2::default((nrow, ncol));
+        let mut ext_slices = Array2::default((nrow, ncol));
+
+        row1 = 0;
+        row2 = drow + nrow % rows - 1;
+        for row in 0..rows {
+            col1 = 0;
+            col2 = dcol + ncol % cols - 1;
+            for col in 0..cols {
+
+                rowmin = row1 as isize;
+                rowmax = row2 as isize;
+                colmin = col1 as isize;
+                colmax = col2 as isize;
+
+                for i in row1..row2 {
+                    for j in col1..col2 {
+                        radius = (input[[i, j]] / cellsize) as isize;
+
+                        delta = i as isize - radius;
+                        if delta < rowmin {
+                            rowmin = delta;
+                        }
+
+                        delta = j as isize - radius;
+                        if delta < colmin {
+                            colmin = delta;
+                        }
+
+                        delta = i as isize + radius;
+                        if delta > rowmax {
+                            rowmax = delta;
+                        }
+
+                        delta = j as isize + radius;
+                        if delta > colmax {
+                            colmax = delta;
+                        }
+                    }
+
+                    rowmin = max(0, rowmin);
+                    colmin = max(0, colmin);
+
+                    rowmax = min((nrow - 1) as isize, rowmax);
+                    colmax = min((ncol - 1) as isize, colmax);
+                }
+
+                slices[[row,col]] = (row1, row2, col1, col2);
+                ext_slices[[row,col]] = (rowmin as usize, rowmax as usize, colmin as usize, colmax as usize);
+
+                println!("[{}, {}] × [{}, {}] -> [{}, {}] × [{}, {}]", row1, row2, col1, col2, rowmin, rowmax, colmin, colmax);
+
+                col1  = col2;
+                col2 += dcol;
+            }
+            row1  = row2;
+            row2 += drow;
+        }
+
+        for row in 0..rows {
+            for col in 0..cols {
+                let bbox = slices[[row, col]];
+                let ebox = ext_slices[[row, col]];
+                let tile = euclidean_width(input.slice(s![ebox.0..ebox.1, ebox.2..ebox.3]), cellsize);
+
+                for i in bbox.0..bbox.1 {
+                    for j in bbox.2..bbox.3 {
+                        output[[i, j]] = tile[[i - ebox.0, j - ebox.2]];
+                    }
+                }
+                println!("{}, {}", row, col);
             }
         }
 
@@ -552,7 +641,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         cellsize: f64
     ) -> &'py PyArray2<f64> {
         let source = source.as_array();
-        let result = euclidean_width(source, cellsize);
+        let dist = euclidean_distance(source, cellsize);
+        let result = euclidean_width(dist.view(), cellsize);
         result.into_pyarray(py)
     }
 
@@ -566,6 +656,22 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     ) -> &'py PyArray2<f64> {
         let source = source.as_array();
         let result = euclidean_width2(source, cellsize);
+        result.into_pyarray(py)
+    }
+
+    // wrapper of `euclidean_width`
+    #[pyfn(m)]
+    #[pyo3(name = "euclidean_width_split")]
+    fn euclidean_width_split_py<'py>(
+        py: Python<'py>,
+        source: PyReadonlyArray2<'_, f64>,
+        cellsize: f64,
+        rows: usize,
+        cols: usize
+    ) -> &'py PyArray2<f64> {
+        let source = source.as_array();
+        let dist = euclidean_distance(source, cellsize);
+        let result = euclidean_width_split(dist.view(), cellsize, rows, cols);
         result.into_pyarray(py)
     }
 

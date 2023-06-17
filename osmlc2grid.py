@@ -7,7 +7,7 @@ from matplotlib import pyplot
 
 os.environ['USE_PYGEOS'] = '0'
 
-src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/mask_5m_ttk.tif')
+src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/blds_5m.tif')
 profile = src.profile
 # profile.update(count = 1, compress = 'lzw')
 #
@@ -27,12 +27,16 @@ euc = rs.euclidean_width(array, 5.0)
 end = time.time()
 print(end - start)
 
-start = time.time()
-euc = rs.euclidean_width2(array, 5.0)
-end = time.time()
-print(end - start)
+with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/width.tif', 'w', **profile) as dst:
+    dst.write(euc, indexes = 1)
 
-# with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/width_ttk_small.tif', 'w', **profile) as dst:
+
+# start = time.time()
+# euc = rs.euclidean_width_split(array, 5.0, 4, 3)
+# end = time.time()
+# print(end - start)
+#
+# with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/width_split.tif', 'w', **profile) as dst:
 #     dst.write(euc, indexes = 1)
 
 # pyplot.imshow(euc[0, :, :], cmap='bone')
