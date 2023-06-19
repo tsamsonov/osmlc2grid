@@ -9,6 +9,7 @@ name = "rasterspace"
 crate-type = ["cdylib"]
 
 [dependencies]
+indicatif = "0.17.5"
 ndarray-stats = "0.5.1"
 num_cpus = "1.15.0"
 numpy = "0.18.0"

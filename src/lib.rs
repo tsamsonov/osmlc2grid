@@ -8,6 +8,8 @@ use std::thread;
 use std::sync::mpsc;
 use num_cpus;
 
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+
 enum EuclideanTransform {
     DISTANCE,
     ALLOCATION
@@ -567,10 +569,30 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         let mut tasks = Vec::new();
 
+        let m = MultiProgress::new();
+        let sty = ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        ).unwrap()
+         .progress_chars("##-");
+
+
+        let mut bars: Vec<ProgressBar> = Vec::new();
+        let pb = m.add(ProgressBar::new(100));
+        pb.set_style(sty.clone());
+        bars.push(pb);
+
+        for proc in 1..nproc {
+            let pb = m.insert_after(&bars[proc-1], ProgressBar::new(100));
+            pb.set_style(sty.clone());
+            bars.push(pb);
+        }
+
         for proc in 0..nproc {
             let mut output_ref = arcoutput.clone();
             let distance_ref = arcdistance.clone();
             let height_ref = archeight.clone();
+
+            let bars_clone = bars.clone();
 
             tasks.push(thread::spawn(move || {
                 let (mut hsum, mut hmean, mut hw, mut radius): (f64, f64, f64, f64);
@@ -589,14 +611,20 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     }
                 }
 
+                bars_clone[proc].set_length(queue.len() as u64);
+
                 while queue.len() > 0 {
                     let (ord_radius, i, j) = queue.pop().unwrap();
 
+                    bars_clone[proc].inc(1);
+
+                    // pb.set_position((100 * (total - queue.len()) / total) as u64);
+
                     radius = f64::from(ord_radius);
 
-                    // if output_ref[[1, i, j]] > radius * 2.0 {
-                    //     continue;
-                    // }
+                    if output_ref[[1, i, j]] > radius * 2.0 {
+                        continue;
+                    }
 
                     let mut covered: Vec<(usize, usize)> = Vec::new();
 
@@ -640,9 +668,13 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     }
                 }
 
+                bars_clone[proc].finish_with_message("done");
+
                 return output_ref;
             }))
         }
+
+        m.clear().unwrap();
 
         for task in tasks {
             let add = task.join().unwrap();
