@@ -16,3 +16,4 @@ from numpy import int16
 # osmium tags-filter -o buildings.osm.pbf moscow_0045.osm.pbf awr/building awr/building:part  --overwrite
 # ogr2ogr buildings.gpkg buildings.osm.pbf -oo CONFIG_FILE=buildings.ini -t_srs EPSG:32637
 # gdal_rasterize -a height -ot Int16 -tr 5 5 -l multipolygons buildings.gpkg heights.tif -sql "SELECT * FROM multipolygons order by height"
+# gdal_rasterize -a id -ot Int32 -tr 5 5 -l multipolygons buildings.gpkg fids.tif -sql "SELECT *, ROW_NUMBER() OVER(ORDER BY height) AS id FROM multipolygons"

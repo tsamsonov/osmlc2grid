@@ -8,26 +8,33 @@ from matplotlib import pyplot
 os.environ['USE_PYGEOS'] = '0'
 
 start = time.time()
-src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/heights.tif')
+# src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/heights.tif')
 
 
 # src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/blds_5m.tif')
-# src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/mask_5m_ttk.tif')
+src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/fids_ttk.tif')
 profile = src.profile
 # profile.update(count = 1, compress = 'lzw')
 #
 array = src.read(1).astype('float64')
-end = time.time()
-print(end - start)
-
-#
-# start = time.time()
-# euc = rs.euclidean_distance(array, 5.0)
 # end = time.time()
 # print(end - start)
-#
-# with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/euc_small.tif', 'w', **profile) as dst:
-#     dst.write(euc, indexes = 1)
+
+
+start = time.time()
+euc = rs.euclidean_distance(array, 5.0)
+end = time.time()
+print(end - start)
+with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif', 'w', **profile) as dst:
+    dst.write(euc, indexes = 1)
+
+
+start = time.time()
+euc = rs.euclidean_antidistance(array, 5.0)
+end = time.time()
+print(end - start)
+with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/antidistance_ttk.tif', 'w', **profile) as dst:
+    dst.write(euc, indexes = 1)
 #
 #
 # start = time.time()
