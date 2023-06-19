@@ -591,9 +591,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                 while queue.len() > 0 {
                     let (ord_radius, i, j) = queue.pop().unwrap();
-                    let mut covered: Vec<(usize, usize)> = Vec::new();
 
                     radius = f64::from(ord_radius);
+
+                    // if output_ref[[1, i, j]] > radius * 2.0 {
+                    //     continue;
+                    // }
+
+                    let mut covered: Vec<(usize, usize)> = Vec::new();
 
                     w = (radius / cellsize).floor() as isize;
 
@@ -893,17 +898,17 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
     // wrapper of `euclidean_width_params`
     #[pyfn(m)]
-    #[pyo3(name = "euclidean_width_params_split")]
-    fn euclidean_width_params_split_py<'py>(
+    #[pyo3(name = "euclidean_width_params_split2")]
+    fn euclidean_width_params_split2_py<'py>(
         py: Python<'py>,
-        source: PyReadonlyArray2<'_, f64>,
+        distance: PyReadonlyArray2<'_, f64>,
+        allocation: PyReadonlyArray2<'_, f64>,
         cellsize: f64,
         rows: usize,
         cols: usize
     ) -> &'py PyArray3<f64> {
-        let source = source.as_array();
-        let distance = euclidean_distance(source, cellsize);
-        let height = euclidean_allocation(source, cellsize);
+        let distance = distance.as_array();
+        let height = allocation.as_array();
         let mut result = euclidean_width_params_split(distance.view(), height.view(), cellsize, rows, cols);
         result.push(Axis(0), distance.view()).unwrap();
         result.push(Axis(0), height.view()).unwrap();
