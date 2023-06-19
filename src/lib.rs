@@ -614,6 +614,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             queue.push((OrderedFloat(distance_ref[[i, j]]), i, j));
                         }
                         output_ref[[0, i, j]] = -1.0;
+                        output_ref[[1, i, j]] = -1.0;
                     }
                 }
 
@@ -621,15 +622,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                 while queue.len() > 0 {
                     let (ord_radius, i, j) = queue.pop().unwrap();
+                    radius = f64::min(500.0, f64::from(ord_radius));
 
                     bars_clone[proc].inc(1);
+                    bars_clone[proc].set_message(format!("radius = {}", radius));
 
-                    // radius = f64::min(500.0, f64::from(ord_radius));
-                    radius = f64::from(ord_radius);
-
-                    if 0.5 * output_ref[[1, i, j]] > (output_ref[[2, i, j]] + radius) {
-                        continue;
-                    }
+                    // if 0.5 * output_ref[[2, i, j]] > (output_ref[[1, i, j]] + radius) {
+                    //     continue;
+                    // }
 
                     let mut covered: Vec<(usize, usize)> = Vec::new();
 
@@ -653,7 +653,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             uik = ik as usize;
                             ujl = jl as usize;
 
-                            if output_ref[[1, uik, ujl]] < 2.0 * radius {
+                            if output_ref[[2, uik, ujl]] < 2.0 * radius {
                                 covered.push((uik, ujl));
                             }
 
@@ -666,10 +666,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         hw = 0.5 * hmean / radius;
                         for (uik, ujl) in covered {
                             output_ref[[0, uik, ujl]] = (i * ncol + j) as f64;
-                            output_ref[[1, uik, ujl]] = 2.0 * radius;
-                            output_ref[[2, uik, ujl]] =
+                            output_ref[[1, uik, ujl]] =
                                 cellsize * ((i as f64 - uik as f64).powi(2) +
-                                (j as f64 - ujl as f64).powi(2)).sqrt();
+                                    (j as f64 - ujl as f64).powi(2)).sqrt();
+                            output_ref[[2, uik, ujl]] = 2.0 * radius;
                             output_ref[[3, uik, ujl]] = hmean;
                             output_ref[[4, uik, ujl]] = hw;
                         }
@@ -688,7 +688,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             let add = task.join().unwrap();
             for i in 0..nrow {
                 for j in 0..ncol {
-                    if add[[1, i, j]] > output[[1, i, j]] {
+                    if add[[2, i, j]] > output[[2, i, j]] {
                         output[[0, i, j]] = add[[0, i, j]];
                         output[[1, i, j]] = add[[1, i, j]];
                         output[[2, i, j]] = add[[2, i, j]];
@@ -706,7 +706,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
-        let mut output = Array3::<f64>::zeros((4, nrow, ncol));
+        let mut output = Array3::<f64>::zeros((5, nrow, ncol));
         for i in 0..nrow {
             for j in 0..ncol {
                 output[[0, i, j]] = -1.0;
@@ -804,6 +804,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         output[[1, i, j]] = tile[[1, i - ebox.0, j - ebox.2]];
                         output[[2, i, j]] = tile[[2, i - ebox.0, j - ebox.2]];
                         output[[3, i, j]] = tile[[3, i - ebox.0, j - ebox.2]];
+                        output[[4, i, j]] = tile[[4, i - ebox.0, j - ebox.2]];
                     }
                 }
                 println!("{}, {}", row, col);
