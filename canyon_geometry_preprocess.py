@@ -21,12 +21,16 @@ array = src.read(1).astype('float64')
 # with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/allocation.tif', 'w', **profile) as dst:
 #     dst.write(alloc, indexes = 1)
 
-src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/fids.tif')
-profile = src.profile
-array = src.read(1).astype('float64')
-
-alloc = rs.euclidean_antidistance(array, 5.0)
-with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/antidistance.tif', 'w', **profile) as dst:
-    dst.write(alloc, indexes = 1)
-
-# print(tiles)
+profile.update(count = 7, compress = 'lzw', dtype='float64')
+band_names = [
+    'Dominant pixel',
+    'Dominant distance',
+    'Canyon width',
+    'Canyon height',
+    'Canyon H/W ratio',
+    'Building distance',
+    'Building height',
+]
+with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'w', **profile, BIGTIFF='YES') as dst:
+    for i in range(7):
+        dst.set_band_description(i+1, band_names[i])

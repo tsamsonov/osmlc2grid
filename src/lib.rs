@@ -627,10 +627,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     bars_clone[proc].inc(1);
                     bars_clone[proc].set_message(format!("radius = {}", radius));
 
-                    // if 0.5 * output_ref[[2, i, j]] > (output_ref[[1, i, j]] + radius) {
-                    //     continue;
-                    // }
-
                     let mut covered: Vec<(usize, usize)> = Vec::new();
 
                     w = (radius / cellsize).floor() as isize;
@@ -707,6 +703,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let nrow = shape[0];
         let ncol = shape[1];
         let mut output = Array3::<f64>::zeros((5, nrow, ncol));
+
         for i in 0..nrow {
             for j in 0..ncol {
                 output[[0, i, j]] = -1.0;
