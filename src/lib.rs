@@ -623,7 +623,13 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                 while queue.len() > 0 {
                     let (ord_radius, i, j) = queue.pop().unwrap();
-                    radius = f64::min(500.0, f64::from(ord_radius));
+                    // radius = f64::min(500.0, f64::from(ord_radius));
+
+                    if output_ref[[0, i, j]] >= 1000.0 {
+                        continue;
+                    }
+
+                    radius = f64::from(ord_radius);
 
                     bars_clone[proc].inc(1);
                     bars_clone[proc].set_message(format!("radius = {}", radius));
@@ -720,11 +726,22 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let (mut rowmin, mut colmin, mut rowmax, mut colmax, mut delta, mut radius):
             (isize, isize, isize, isize, isize, isize);
 
+        let (mut rowmin_out, mut colmin_out, mut rowmax_out, mut colmax_out):
+            (usize, usize, usize, usize);
+
+        let (mut rowmin_in, mut colmin_in, mut rowmax_in, mut colmax_in):
+            (usize, usize, usize, usize);
+
+        let (mut rowmin_in_rad, mut colmin_in_rad, mut rowmax_in_rad, mut colmax_in_rad):
+            (usize, usize, usize, usize);
+
         let mut slices = Array2::default((nrow, ncol));
         let mut ext_slices = Array2::default((nrow, ncol));
+        let mut out_slices = Array2::default((nrow, ncol));
 
         row1 = 0;
         row2 = drow + nrow % rows - 1;
+
         for row in 0..rows {
             col1 = 0;
             col2 = dcol + ncol % cols - 1;
@@ -735,6 +752,21 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                 colmin = col1 as isize;
                 colmax = col2 as isize;
 
+                rowmin_out = row1;
+                rowmax_out = row2;
+                colmin_out = col1;
+                colmax_out = col2;
+
+                rowmin_in = row1;
+                rowmax_in = row2;
+                colmin_in = col1;
+                colmax_in = col2;
+
+                rowmin_in_rad = 0;
+                colmin_in_rad = 0;
+                rowmax_in_rad = 0;
+                colmax_in_rad = 0;
+
                 for i in row1..row2 {
                     for j in col1..col2 {
                         radius = (distance[[i, j]] / cellsize) as isize;
@@ -742,21 +774,45 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         delta = i as isize - radius;
                         if delta < rowmin {
                             rowmin = delta;
+                            rowmin_out = i;
+                        }
+
+                        if /*delta < row1 as isize && */ radius > rowmin_in_rad as isize {
+                            rowmin_in_rad = radius as usize;
+                            rowmin_in = i;
                         }
 
                         delta = j as isize - radius;
                         if delta < colmin {
                             colmin = delta;
+                            colmin_out = j;
+                        }
+
+                        if /* delta < col1 as isize &&*/ radius > colmin_in_rad as isize {
+                            colmin_in_rad = radius as usize;
+                            colmin_in = j;
                         }
 
                         delta = i as isize + radius;
                         if delta > rowmax {
                             rowmax = delta;
+                            rowmax_out = i;
+                        }
+
+                        if /* delta > row2 as isize && */ radius > rowmax_in_rad as isize {
+                            rowmax_in_rad = radius as usize;
+                            rowmax_in = i;
                         }
 
                         delta = j as isize + radius;
                         if delta > colmax {
                             colmax = delta;
+                            colmax_out = j;
+                        }
+
+                        if /*delta > col2 as isize && */ radius > colmax_in_rad as isize {
+                            colmax_in_rad = radius as usize;
+                            colmax_in = j;
                         }
                     }
 
@@ -765,16 +821,88 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                     rowmax = min((nrow - 1) as isize, rowmax);
                     colmax = min((ncol - 1) as isize, colmax);
+
+                    rowmin_out = max(rowmin_out, rowmin_in);
+                    colmin_out = max(colmin_out, colmin_in);
+
+                    rowmax_out = min(rowmax_out, rowmax_in);
+                    colmax_out = min(colmax_out, colmax_in);
                 }
 
                 slices[[row,col]] = (row1, row2, col1, col2);
                 ext_slices[[row,col]] = (rowmin as usize, rowmax as usize, colmin as usize, colmax as usize);
+                out_slices[[row,col]] = (rowmin_out, rowmax_out, colmin_out, colmax_out);
 
                 col1  = col2;
                 col2 += dcol;
             }
             row1  = row2;
             row2 += drow;
+        }
+
+        for row in 0..rows {
+            for col in 0..cols {
+                if row > 0 {
+                    if ext_slices[[row, col]].0 > out_slices[[row-1, col]].1 {
+                        ext_slices[[row, col]].0 = out_slices[[row-1, col]].1
+                    }
+                    if col > 0 {
+                        if ext_slices[[row, col]].0 > out_slices[[row-1, col-1]].1 {
+                            ext_slices[[row, col]].0 = out_slices[[row-1, col-1]].1
+                        }
+                    }
+                    if col < cols-1 {
+                        if ext_slices[[row, col]].0 > out_slices[[row-1, col+1]].1 {
+                            ext_slices[[row, col]].0 = out_slices[[row-1, col+1]].1
+                        }
+                    }
+                }
+                if col > 0 {
+                    if ext_slices[[row, col]].2 > out_slices[[row, col-1]].3 {
+                        ext_slices[[row, col]].2 = out_slices[[row, col-1]].3
+                    }
+                    if row > 0 {
+                        if ext_slices[[row, col]].2 > out_slices[[row-1, col-1]].3 {
+                            ext_slices[[row, col]].2 = out_slices[[row-1, col-1]].3
+                        }
+                    }
+                    if row < rows-1 {
+                        if ext_slices[[row, col]].2 > out_slices[[row+1, col-1]].3 {
+                            ext_slices[[row, col]].2 = out_slices[[row+1, col-1]].3
+                        }
+                    }
+                }
+                if row < rows-1 {
+                    if ext_slices[[row, col]].1 < out_slices[[row+1, col]].0 {
+                        ext_slices[[row, col]].1 = out_slices[[row+1, col]].0
+                    }
+                    if col > 0 {
+                        if ext_slices[[row, col]].1 < out_slices[[row+1, col-1]].0 {
+                            ext_slices[[row, col]].1 = out_slices[[row+1, col-1]].0
+                        }
+                    }
+                    if col < cols-1 {
+                        if ext_slices[[row, col]].1 < out_slices[[row+1, col+1]].0 {
+                            ext_slices[[row, col]].1 = out_slices[[row+1, col+1]].0
+                        }
+                    }
+                }
+                if col < cols-1 {
+                    if ext_slices[[row, col]].3 < out_slices[[row, col+1]].2 {
+                        ext_slices[[row, col]].3 = out_slices[[row, col+1]].2
+                    }
+                    if row > 0 {
+                        if ext_slices[[row, col]].3 < out_slices[[row-1, col+1]].2 {
+                            ext_slices[[row, col]].3 = out_slices[[row-1, col+1]].2
+                        }
+                    }
+                    if row < rows-1 {
+                        if ext_slices[[row, col]].3 < out_slices[[row+1, col+1]].2 {
+                            ext_slices[[row, col]].3 = out_slices[[row+1, col+1]].2
+                        }
+                    }
+                }
+            }
         }
 
         for row in 0..rows {
