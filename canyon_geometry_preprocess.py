@@ -21,16 +21,26 @@ array = src.read(1).astype('float64')
 # with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/allocation.tif', 'w', **profile) as dst:
 #     dst.write(alloc, indexes = 1)
 
-profile.update(count = 7, compress = 'lzw', dtype='float64')
 band_names = [
-    'Dominant pixel',
-    'Dominant distance',
+    # 'Dominant pixel',
+    # 'Dominant distance',
+    'Building',
     'Canyon width',
     'Canyon height',
-    'Canyon H/W ratio',
-    'Building distance',
-    'Building height',
+    # 'Canyon H/W ratio',
+    # 'Building distance',
+    # 'Building height',
 ]
-with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'w', **profile, BIGTIFF='YES') as dst:
-    for i in range(7):
-        dst.set_band_description(i+1, band_names[i])
+
+N = len(band_names)
+profile.update(count = N, compress = 'lzw', dtype='int16')
+
+dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'w', **profile, BIGTIFF='YES')
+dst.write(np.where(array > 0.0, 1, 0), indexes=1)
+
+for i in range(N):
+    dst.set_band_description(i+1, band_names[i])
+
+dst.close()
+
+

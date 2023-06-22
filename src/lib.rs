@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 use pyo3::prelude::*;
-use numpy::ndarray::{s, Array2, ArrayView2, Array3, Axis};
+use numpy::ndarray::{s, Array2, ArrayView2, Array3};
 use numpy::{PyArray2, PyReadonlyArray2, PyArray3, IntoPyArray};
 use std::collections::{BinaryHeap};
 use ordered_float::OrderedFloat;
@@ -565,7 +565,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let nrow = shape[0];
         let ncol = shape[1];
 
-        let mut output = Array3::<f64>::zeros((5, nrow, ncol));
+        // let mut output = Array3::<f64>::zeros((5, nrow, ncol));
+        let mut output = Array3::<f64>::zeros((2, nrow, ncol));
         let arcoutput = output.to_shared();
 
         let arcdistance = distance.to_shared();
@@ -580,7 +581,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
         ).unwrap()
          .progress_chars("##-");
-
 
         let mut bars: Vec<ProgressBar> = Vec::new();
         let pb = m.add(ProgressBar::new(100));
@@ -601,7 +601,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             let bars_clone = bars.clone();
 
             tasks.push(thread::spawn(move || {
-                let (mut hsum, mut hmean, mut hw, mut radius): (f64, f64, f64, f64);
+                // let mut hw f64;
+                let (mut hsum, mut hmean, mut radius): (f64, f64, f64);
                 let (mut w, mut ik, mut jl): (isize, isize, isize);
                 let (mut uik, mut ujl): (usize, usize);
                 let mut n: usize;
@@ -613,8 +614,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         if distance_ref[[i, j]] > 0.0 {
                             queue.push((OrderedFloat(distance_ref[[i, j]]), i, j));
                         }
-                        output_ref[[0, i, j]] = -1.0;
-                        output_ref[[1, i, j]] = -1.0;
+                        // output_ref[[0, i, j]] = -1.0;
+                        // output_ref[[1, i, j]] = -1.0;
                     }
                 }
 
@@ -649,7 +650,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             uik = ik as usize;
                             ujl = jl as usize;
 
-                            if output_ref[[2, uik, ujl]] < 2.0 * radius {
+                            if output_ref[[0, uik, ujl]] < 2.0 * radius {
                                 covered.push((uik, ujl));
                             }
 
@@ -659,15 +660,15 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     }
                     if covered.len() > 0 {
                         hmean = hsum / n as f64;
-                        hw = 0.5 * hmean / radius;
+                        // hw = 0.5 * hmean / radius;
                         for (uik, ujl) in covered {
-                            output_ref[[0, uik, ujl]] = (i * ncol + j) as f64;
-                            output_ref[[1, uik, ujl]] =
-                                cellsize * ((i as f64 - uik as f64).powi(2) +
-                                    (j as f64 - ujl as f64).powi(2)).sqrt();
-                            output_ref[[2, uik, ujl]] = 2.0 * radius;
-                            output_ref[[3, uik, ujl]] = hmean;
-                            output_ref[[4, uik, ujl]] = hw;
+                            output_ref[[0, uik, ujl]] = 2.0 * radius;
+                            output_ref[[1, uik, ujl]] = hmean;
+                            // output_ref[[0, uik, ujl]] = (i * ncol + j) as f64;
+                            // output_ref[[1, uik, ujl]] =
+                            //     cellsize * ((i as f64 - uik as f64).powi(2) +
+                            //         (j as f64 - ujl as f64).powi(2)).sqrt();
+                            // output_ref[[4, uik, ujl]] = hw;
                         }
                     }
                 }
@@ -684,12 +685,13 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             let add = task.join().unwrap();
             for i in 0..nrow {
                 for j in 0..ncol {
-                    if add[[2, i, j]] > output[[2, i, j]] {
+                    // if add[[2, i, j]] > output[[2, i, j]] {
+                    if add[[0, i, j]] > output[[0, i, j]] {
                         output[[0, i, j]] = add[[0, i, j]];
                         output[[1, i, j]] = add[[1, i, j]];
-                        output[[2, i, j]] = add[[2, i, j]];
-                        output[[3, i, j]] = add[[3, i, j]];
-                        output[[4, i, j]] = add[[4, i, j]];
+                        // output[[2, i, j]] = add[[2, i, j]];
+                        // output[[3, i, j]] = add[[3, i, j]];
+                        // output[[4, i, j]] = add[[4, i, j]];
                     }
                 }
             }
@@ -702,13 +704,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
-        let mut output = Array3::<f64>::zeros((5, nrow, ncol));
+        let mut output = Array3::<f64>::zeros((2, nrow, ncol));
+        // let mut output = Array3::<f64>::zeros((5, nrow, ncol));
 
-        for i in 0..nrow {
-            for j in 0..ncol {
-                output[[0, i, j]] = -1.0;
-            }
-        }
+        // for i in 0..nrow {
+        //     for j in 0..ncol {
+        //         output[[0, i, j]] = -1.0;
+        //     }
+        // }
 
         let drow = nrow / rows;
         let dcol = ncol / cols;
@@ -779,8 +782,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                 let bbox = slices[[row, col]];
                 let ebox = ext_slices[[row, col]];
 
-                println!("[{}, {}] × [{}, {}] -> [{}, {}] × [{}, {}]",
-                         bbox.0, bbox.1, bbox.2, bbox.3, ebox.0, ebox.1, ebox.2, ebox.3);
+                println!(
+                    "[{}, {}] × [{}, {}] -> [{}, {}] × [{}, {}] = {} × {}",
+                    bbox.0,  bbox.1, bbox.2,  bbox.3,
+                    ebox.0,  ebox.1, ebox.2,  ebox.3,
+                    ebox.1 - ebox.0, ebox.3 - ebox.2,
+                );
 
                 let tile = euclidean_width_params(
                     distance.slice(s![ebox.0..ebox.1, ebox.2..ebox.3]),
@@ -788,20 +795,20 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     cellsize
                 );
 
-                let ecols = ebox.3 - ebox.2;
+                // let ecols = ebox.3 - ebox.2;
 
                 for i in bbox.0..bbox.1 {
                     for j in bbox.2..bbox.3 {
-                        let eij = tile[[0, i - ebox.0, j - ebox.2]];
-                        if eij > 0.0 {
-                            let ei = ebox.0 + eij as usize / ecols;
-                            let ej = ebox.2 + eij as usize % ecols;
-                            output[[0, i, j]] = (ei * ncol + ej) as f64;
-                        }
+                        // let eij = tile[[0, i - ebox.0, j - ebox.2]];
+                        // if eij > 0.0 {
+                        //     let ei = ebox.0 + eij as usize / ecols;
+                        //     let ej = ebox.2 + eij as usize % ecols;
+                        //     output[[0, i, j]] = (ei * ncol + ej) as f64;
+                        // }
+                        output[[0, i, j]] = tile[[0, i - ebox.0, j - ebox.2]];
                         output[[1, i, j]] = tile[[1, i - ebox.0, j - ebox.2]];
-                        output[[2, i, j]] = tile[[2, i - ebox.0, j - ebox.2]];
-                        output[[3, i, j]] = tile[[3, i - ebox.0, j - ebox.2]];
-                        output[[4, i, j]] = tile[[4, i - ebox.0, j - ebox.2]];
+                        // output[[3, i, j]] = tile[[3, i - ebox.0, j - ebox.2]];
+                        // output[[4, i, j]] = tile[[4, i - ebox.0, j - ebox.2]];
                     }
                 }
                 println!("{}, {}", row, col);
@@ -944,9 +951,9 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let source = source.as_array();
         let distance = euclidean_distance(source, cellsize);
         let height = euclidean_allocation(source, cellsize);
-        let mut result = euclidean_width_params(distance.view(), height.view(), cellsize);
-        result.push(Axis(0), distance.view()).unwrap();
-        result.push(Axis(0), height.view()).unwrap();
+        let result = euclidean_width_params(distance.view(), height.view(), cellsize);
+        // result.push(Axis(0), distance.view()).unwrap();
+        // result.push(Axis(0), height.view()).unwrap();
         result.into_pyarray(py)
     }
 
@@ -963,12 +970,11 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     ) -> &'py PyArray3<f64> {
         let distance = distance.as_array();
         let height = allocation.as_array();
-        let mut result = euclidean_width_params_split(distance.view(), height.view(), cellsize, rows, cols);
-        result.push(Axis(0), distance.view()).unwrap();
-        result.push(Axis(0), height.view()).unwrap();
+        let result = euclidean_width_params_split(distance.view(), height.view(), cellsize, rows, cols);
+        // result.push(Axis(0), distance.view()).unwrap();
+        // result.push(Axis(0), height.view()).unwrap();
         result.into_pyarray(py)
     }
-
 
     Ok(())
 }
