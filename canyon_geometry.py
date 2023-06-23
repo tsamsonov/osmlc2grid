@@ -36,7 +36,7 @@ for i in range(dim[0]):
         allocation = alloc_src.read(1, window=win_read).astype('float64')
         alloc_src.close()
 
-        params = rs.euclidean_width_params_split2(distance, allocation, 5.0, 3, 3)
+        params = rs.euclidean_width_params_split(distance, allocation, 5.0, 3, 3)
 
         dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'r+')
         for k in range(2):
