@@ -22,22 +22,20 @@ with open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/tiles.npy', 'wb') as dst:
     np.save(dst, tiles)
 
 band_names = [
-    # 'Dominant pixel',
-    # 'Dominant distance',
     'Building height',
     'Canyon width',
     'Canyon height',
+    # 'Dominant pixel',
+    # 'Dominant distance',
     # 'Canyon H/W ratio',
     # 'Building distance',
     # 'Building height',
 ]
 
 N = len(band_names)
-profile.update(count = N, compress = 'lzw', dtype='int16')
-
+profile.update(count=N, compress = 'lzw', dtype='int16')
 dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'w', **profile, BIGTIFF='YES')
-dst.write(np.where(array > 0.0, 1, 0), indexes=1)
-
+dst.write(array, indexes=1)
 for i in range(N):
     dst.set_band_description(i+1, band_names[i])
 
