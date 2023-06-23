@@ -11,6 +11,8 @@ tiles = np.load('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/tiles.npy')
 
 dim = np.shape(tiles)
 
+print(tiles)
+
 start = time.time()
 
 for i in range(dim[0]):
@@ -42,4 +44,5 @@ for i in range(dim[0]):
         dst.close()
 
 end = time.time()
+
 print(end - start)
