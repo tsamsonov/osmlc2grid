@@ -751,6 +751,36 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output;
     }
 
+    fn get_shifts_x(x0: isize, y0: isize, x2: isize, y2: isize) -> Vec<(isize, isize)> {
+        let dx = x1 - x0;
+        let mut dy = y1 - y0;
+        let mut yi = 1;
+
+        if dy < 0 {
+            yi = -1;
+            dy = -dy;
+        }
+
+        let mut D = 2*dy - dx;
+        let mut y = y0;
+
+        let mut s = Vec::new();
+
+        for x in x0..x1 {
+            s.push((x,y));
+            if D > 0 {
+                y += yi;
+                D += 2* (dy-dx);
+            } else {
+                D += 2 * dy;
+            }
+        }
+
+        return s;
+
+    }
+
+
     // wrapper of `euclidean_distance
     #[pyfn(m)]
     #[pyo3(name = "euclidean_distance")]

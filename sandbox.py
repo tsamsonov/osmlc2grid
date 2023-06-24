@@ -45,7 +45,7 @@ with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif', 
 
 
 start = time.time()
-euc = rs.euclidean_width_split(array, 5.0, 3, 4)
+euc = rs.euclidean_width_split(array, 5.0, 3, 4, True)
 end = time.time()
 print(end - start)
 
