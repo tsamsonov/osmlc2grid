@@ -7,13 +7,13 @@ use ordered_float::OrderedFloat;
 use std::thread;
 use std::sync::mpsc;
 use num_cpus;
-
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 enum EuclideanTransform {
     DISTANCE,
     ALLOCATION
 }
+
 /// A Python module implemented in Rust. The name of this function must match
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
 /// import the module.
@@ -751,33 +751,78 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output;
     }
 
-    fn get_shifts_x(x0: isize, y0: isize, x2: isize, y2: isize) -> Vec<(isize, isize)> {
+    fn get_shifts_x(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
         let dx = x1 - x0;
         let mut dy = y1 - y0;
         let mut yi = 1;
-
         if dy < 0 {
             yi = -1;
             dy = -dy;
         }
 
-        let mut D = 2*dy - dx;
+        let mut d = 2 * dy - dx;
         let mut y = y0;
 
         let mut s = Vec::new();
 
         for x in x0..x1 {
             s.push((x,y));
-            if D > 0 {
+            if d > 0 {
                 y += yi;
-                D += 2* (dy-dx);
+                d += 2 * (dy - dx);
             } else {
-                D += 2 * dy;
+                d += 2 * dy;
             }
         }
 
         return s;
+    }
 
+    fn get_shifts_y(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
+        let mut dx = x1 - x0;
+        let dy = y1 - y0;
+        let mut xi = 1;
+        if dx < 0 {
+            xi = -1;
+            dx = -dx;
+        }
+
+        let mut d = 2 * dx - dy;
+        let mut x = x0;
+
+        let mut s = Vec::new();
+
+        for y in y0..y1 {
+            s.push((x,y));
+            if d > 0 {
+                x += xi;
+                d += 2 * (dx - dy);
+            } else {
+                d += 2 * dx;
+            }
+        }
+
+        return s;
+    }
+
+    fn get_shifts(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
+        if (y1 - y0).abs() < (x1 - x0).abs() {
+            if x0 > x1 {
+                let mut shifts = get_shifts_x(x1, y1, x0, y0);
+                shifts.reverse();
+                shifts
+            } else {
+                get_shifts_x(x0, y0, x1, y1)
+            }
+        } else {
+            if y0 > y1 {
+                let mut shifts = get_shifts_y(x1, y1, x0, y0);
+                shifts.reverse();
+                shifts
+            } else {
+                return get_shifts_y(x0, y0, x1, y1)
+            }
+        }
     }
 
 
