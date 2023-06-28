@@ -751,6 +751,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output;
     }
 
+    fn is_within(i: isize, j: isize, nrow: usize, ncol: usize) -> bool {
+        i >= 0 || i < nrow as isize || j >= 0 || j < ncol as isize
+    }
+
     fn get_shifts_x(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
         let dx = x1 - x0;
         let mut dy = y1 - y0;
@@ -813,7 +817,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                 shifts
             } else {
                 get_shifts_x(x0, y0, x1, y1)
-            }
+            } 
         } else {
             if y0 > y1 {
                 let mut shifts = get_shifts_y(x1, y1, x0, y0);
@@ -825,6 +829,78 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         }
     }
 
+    fn get_length(si1: isize, sj1: isize, si2: isize, sj2: isize) -> f64 {
+        f64::sqrt(isize::pow(si1 - si2, 2) as f64 + isize::pow(sj1 - sj2, 2) as f64)
+    }
+
+    fn get_main_dir(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>,
+                    shifts: &Vec<(isize, isize)>, dir1: usize, dir2: usize) -> ArrayView2<(usize, f64, f64)> {
+
+        let shape = distance.raw_dim();
+        let nrow = shape[0];
+        let ncol = shape[1];
+        let ndirs = shifts.len();
+        let ndirs2 = ndirs/2;
+
+        let main_dir = Array2::<(usize, f64, f64)>::new(shape);
+        let new_dir = Array2::from_elem(shape,true);
+
+        let mut sk: usize;
+        let (mut ik, mut jk): (isize, isize);
+        let mut length: f64;
+
+        for dk in dir1..dir2 {
+            let sh = vec![shifts[dk], shifts[ndirs2+dk]];
+            let sidx = vec![0_usize, 0_usize];
+            let h = vec![0.0, 0.0];
+
+            for i in 0..nrow {
+                for j in 0..ncol {
+                    sidx[0] = 0;
+                    sidx[1] = 0;
+                    h[0] = 0.0;
+                    h[1] = 0.0;
+                    for k in 0..2 {
+                        sk = 0;
+                        for s in sh[k] {
+                            ik = i + s.0;
+                            jk = j + s.1;
+                            if is_within(ik, jk, nrow, ncol) {
+                                if distance[[ik, jk]] < f64::EPSILON {
+                                    sidx[k] = sk;
+                                    h[k] = height[[ik, jk]];
+                                    break;
+                                }
+                            } else {
+                                sidx[k] = sk;
+                                h[k] = 0.0;
+                                break;
+                            }
+
+                            sk += 1;
+                        }
+                    }
+
+                    length = get_length(
+                        sh[0][sidx[0]].0, sh[0][sidx[0]].1,
+                        sh[1][sidx[1]].0, sh[1][sidx[1]].1
+                    );
+
+                    for k in 0..2 {
+                        let s = sh[k];
+                        for sk in 0..sidx[k] {
+                            ik = i + s[sk].0;
+                            jk = j + s[sk].1;
+                        }
+                    }
+
+                }
+            }
+        }
+
+        return main_dir
+
+    }
 
     // wrapper of `euclidean_distance
     #[pyfn(m)]
