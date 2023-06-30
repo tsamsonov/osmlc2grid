@@ -4,6 +4,7 @@ use numpy::ndarray::{s, Array2, ArrayView2, Array3};
 use numpy::{PyArray2, PyReadonlyArray2, PyArray3, IntoPyArray};
 use std::collections::{BinaryHeap};
 use ordered_float::OrderedFloat;
+use std::f64::consts::PI;
 use std::thread;
 use std::sync::mpsc;
 use num_cpus;
@@ -833,8 +834,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         f64::sqrt(isize::pow(si1 - si2, 2) as f64 + isize::pow(sj1 - sj2, 2) as f64)
     }
 
-    fn get_main_dir(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>,
-                    shifts: &Vec<(isize, isize)>, dir1: usize, dir2: usize, cellsize: f64) -> Array2<(usize, f64, f64)> {
+    fn main_dir_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, shifts: &Vec<Vec<(isize, isize)>>, dir1: usize, dir2: usize, cellsize: f64, progress: &ProgressBar) -> Array2<(usize, f64, f64)> {
 
         let shape = distance.raw_dim();
         let nrow = shape[0];
@@ -843,19 +843,26 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let ndirs2 = ndirs/2;
 
         // dir, len, cossum
-        let result = Array2::<(usize, f64, f64)>::zeros(shape);
+        let mut result = Array2::<(usize, f64, f64)>::from_elem(shape, (0, 0.0, 0.0));
 
         let mut new_dir = Array2::from_elem(shape,true);
         let mut new_len = Array2::<f64>::zeros(shape);
 
         let mut sk: usize;
         let (mut ik, mut jk): (isize, isize);
+        let (mut uik, mut ujk): (usize, usize);
         let mut length: f64;
 
+        let proc_dirs = dir2 - dir1;
+        let mut cur_dir = 0;
+
         for dk in dir1..dir2 {
-            let sh = vec![shifts[dk], shifts[ndirs2+dk]];
-            let sidx = vec![0_usize, 0_usize];
-            let h = vec![0.0, 0.0];
+            let sh = vec![&shifts[dk], &shifts[ndirs2+dk]];
+            let mut sidx = vec![0_usize, 0_usize];
+            let mut h = vec![0.0, 0.0];
+
+            progress.set_position(0);
+            progress.set_message(format!("direction {}/{}", cur_dir, proc_dirs));
 
             for i in 0..nrow {
                 for j in 0..ncol {
@@ -866,12 +873,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     for k in 0..2 {
                         sk = 0;
                         for s in sh[k] {
-                            ik = i + s.0;
-                            jk = j + s.1;
+                            ik = i as isize + s.0;
+                            jk = j as isize + s.1;
                             if is_within(ik, jk, nrow, ncol) {
-                                if distance[[ik, jk]] < f64::EPSILON {
+                                uik = ik as usize;
+                                ujk = jk as usize;
+                                if distance[[uik, ujk]] < f64::EPSILON {
                                     sidx[k] = sk;
-                                    h[k] = height[[ik, jk]];
+                                    h[k] = height[[uik, ujk]];
                                     break;
                                 }
                             } else {
@@ -890,14 +899,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     );
 
                     for k in 0..2 {
-                        let s = sh[k];
+                        let s = &sh[k];
                         for sk in 0..sidx[k] {
-                            ik = i + s[sk].0;
-                            jk = j + s[sk].1;
-                            new_len[[ik, jk]] = length;
+                            uik = (i as isize + s[sk].0) as usize;
+                            ujk = (j as isize + s[sk].1) as usize;
+                            new_len[[uik, ujk]] = length;
 
-                            if new_dir[[ik, jk]] {
-                                result[[ik, jk]].3 +=
+                            if new_dir[[uik, ujk]] {
+                                result[[uik, ujk]].2 +=
                                     f64::powi(
                                     f64::cos(
                                         f64::atan2(
@@ -909,11 +918,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                                         ),
                                     2
                                     );
-                                new_dir[[ik, jk]] = false;
+                                new_dir[[uik, ujk]] = false;
                             }
                         }
                     }
 
+                    progress.inc(1);
                 }
             }
 
@@ -929,9 +939,99 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             new_len.fill(0.0);
             new_dir.fill(true);
 
+            cur_dir += 1;
+
         }
+
+        progress.finish_with_message("done");
+
         return result;
     }
+
+    // possible numbers for discr: 1, 2, 3, 4, 5, 6, 9, 10, 12, 15, 18, 20, 30, 36, 45, 60, 90
+    fn euclidean_length_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, discr: usize, radius: f64, cellsize: f64) -> Array3<f64> {
+        let shape = distance.raw_dim();
+        let nrow = shape[0];
+        let ncol = shape[1];
+        let nelem = nrow * ncol;
+
+        // let mut output = Array3::<f64>::zeros((5, nrow, ncol));
+        let mut output = Array3::<f64>::zeros((3, nrow, ncol));
+
+        let r = radius / cellsize;
+        let mut a = 0.5 * PI;
+        let ndirs = 360 / discr;
+        let (mut i, mut j): (isize, isize);
+        let mut shifts = Vec::new();
+
+        for _ in 0..ndirs {
+            i = (-r * f64::cos(a)) as isize;
+            j = (r * f64::sin(a)) as isize;
+            shifts.push(get_shifts(0, 0, i, j));
+            a -= discr as f64;
+        }
+
+        let arcdistance = distance.to_shared();
+        let archeight = height.to_shared();
+
+        let nproc = num_cpus::get_physical();
+
+        let mut tasks = Vec::new();
+
+        let m = MultiProgress::new();
+        let sty = ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        ).unwrap()
+            .progress_chars("##-");
+
+        let mut bars: Vec<ProgressBar> = Vec::new();
+        let pb = m.add(ProgressBar::new(nelem as u64));
+        pb.set_style(sty.clone());
+        bars.push(pb);
+
+        for proc in 1..nproc {
+            let pb = m.insert_after(&bars[proc - 1], ProgressBar::new(nelem as u64));
+            pb.set_style(sty.clone());
+            bars.push(pb);
+        }
+
+        let proc_dirs = ndirs / (2 * nproc);
+
+        let mut dir1 = 0_usize;
+        let mut dir2 = proc_dirs + ndirs % (2 * nproc);
+
+        for _ in 0..nproc {
+            let distance_ref = arcdistance.clone();
+            let height_ref = archeight.clone();
+            let shifts_ref = shifts.clone();
+            let bars_clone = bars.clone();
+
+            tasks.push(thread::spawn(move || {
+                main_dir_params(distance_ref.view(), height_ref.view(), &shifts_ref, dir1, dir2, cellsize, &bars_clone[nproc])
+            }));
+
+            dir1 = dir2;
+            dir2 += proc_dirs;
+        }
+
+        m.clear().unwrap();
+
+        for task in tasks {
+            let add = task.join().unwrap();
+            for i in 0..nrow {
+                for j in 0..ncol {
+                    if add[[i, j]].1 > output[[1, i, j]] {
+                        output[[0, i, j]] = discr as f64 * add[[i, j]].0 as f64;
+                        output[[1, i, j]] = add[[i, j]].1;
+                    }
+                    output[[2, i, j]] += add[[i, j]].2;
+                }
+            }
+        }
+
+        return output;
+    }
+
 
     // wrapper of `euclidean_distance
     #[pyfn(m)]
@@ -1069,6 +1169,25 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let height = allocation.as_array();
         let result = euclidean_width_params_split(
             distance.view(), height.view(), cellsize, rows, cols, hard
+        );
+        result.into_pyarray(py)
+    }
+
+    // wrapper of `euclidean_width_params`
+    #[pyfn(m)]
+    #[pyo3(name = "euclidean_length_params")]
+    fn euclidean_length_params_py<'py>(
+        py: Python<'py>,
+        distance: PyReadonlyArray2<'_, f64>,
+        height: PyReadonlyArray2<'_, f64>,
+        discr: usize,
+        radius: f64,
+        cellsize: f64
+    ) -> &'py PyArray3<f64> {
+        let distance = distance.as_array();
+        let height = height.as_array();
+        let result = euclidean_length_params(
+            distance.view(), height.view(), discr, radius, cellsize
         );
         result.into_pyarray(py)
     }
