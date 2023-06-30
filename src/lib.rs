@@ -753,7 +753,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     }
 
     fn is_within(i: isize, j: isize, nrow: usize, ncol: usize) -> bool {
-        i >= 0 || i < nrow as isize || j >= 0 || j < ncol as isize
+        i >= 0 && i < nrow as isize && j >= 0 && j < ncol as isize
     }
 
     fn get_shifts_x(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
@@ -854,7 +854,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let mut length: f64;
 
         let proc_dirs = dir2 - dir1;
-        let mut cur_dir = 0;
+        let mut cur_dir = 1;
 
         for dk in dir1..dir2 {
             let sh = vec![&shifts[dk], &shifts[ndirs2+dk]];
@@ -912,7 +912,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                                         f64::atan2(
                                             h[k],
                                             cellsize * get_length(
-                                                s[sidx[k]].0, s[sk].0, s[sidx[k]].1, s[sk].1
+                                                s[sidx[k]].0, s[sidx[k]].1, s[sk].0, s[sk].1
                                                 )
                                             )
                                         ),
@@ -965,10 +965,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let mut shifts = Vec::new();
 
         for _ in 0..ndirs {
-            i = (-r * f64::cos(a)) as isize;
-            j = (r * f64::sin(a)) as isize;
+            i = (-r * f64::sin(a)) as isize;
+            j = (r * f64::cos(a)) as isize;
             shifts.push(get_shifts(0, 0, i, j));
-            a -= discr as f64;
+            a -= PI * discr as f64 / 180.0;
         }
 
         let arcdistance = distance.to_shared();
@@ -1000,14 +1000,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let mut dir1 = 0_usize;
         let mut dir2 = proc_dirs + ndirs % (2 * nproc);
 
-        for _ in 0..nproc {
+        for proc in 0..nproc {
             let distance_ref = arcdistance.clone();
             let height_ref = archeight.clone();
             let shifts_ref = shifts.clone();
             let bars_clone = bars.clone();
 
             tasks.push(thread::spawn(move || {
-                main_dir_params(distance_ref.view(), height_ref.view(), &shifts_ref, dir1, dir2, cellsize, &bars_clone[nproc])
+                main_dir_params(distance_ref.view(), height_ref.view(), &shifts_ref, dir1, dir2, cellsize, &bars_clone[proc])
             }));
 
             dir1 = dir2;
@@ -1024,7 +1024,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         output[[0, i, j]] = discr as f64 * add[[i, j]].0 as f64;
                         output[[1, i, j]] = add[[i, j]].1;
                     }
-                    output[[2, i, j]] += add[[i, j]].2;
+                    output[[2, i, j]] += 200.0 * add[[i, j]].2 / ndirs as f64;
                 }
             }
         }

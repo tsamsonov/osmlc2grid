@@ -7,24 +7,40 @@ from matplotlib import pyplot
 
 os.environ['USE_PYGEOS'] = '0'
 
-start = time.time()
+src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif')
+distance = src.read(1).astype('float64')
+
+src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/allocation_ttk.tif')
+height = src.read(1).astype('float64')
+
+profile = src.profile
+profile.update(count = 3, compress = 'lzw', dtype='int16')
+
+length = rs.euclidean_length_params(distance, height, 1, 2000, 5.0)
+
+dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/length.tif', 'w', **profile, BIGTIFF='YES')
+dst.write(length)
+
+
+
+# start = time.time()
 # src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/heights.tif')
 # src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/blds_5m.tif')
-src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/fids_ttk.tif')
-profile = src.profile
+# src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/fids_ttk.tif')
+# profile = src.profile
 # profile.update(count = 1, compress = 'lzw')
 #
-array = src.read(1).astype('float64')
+# array = src.read(1).astype('float64')
 # end = time.time()
 # print(end - start)
 
 
-start = time.time()
-euc = rs.euclidean_distance(array, 5.0)
-end = time.time()
-print(end - start)
-with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif', 'w', **profile) as dst:
-    dst.write(euc, indexes = 1)
+# start = time.time()
+# euc = rs.euclidean_distance(array, 5.0)
+# end = time.time()
+# print(end - start)
+# with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif', 'w', **profile) as dst:
+#     dst.write(euc, indexes = 1)
 
 
 # start = time.time()
@@ -44,13 +60,13 @@ with rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif', 
 #     dst.write(euc, indexes = 1)
 
 
-start = time.time()
-euc = rs.euclidean_width_split(array, 5.0, 3, 4, True)
-end = time.time()
-print(end - start)
-
-with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/width_split_ttk.tif', 'w', **profile) as dst:
-    dst.write(euc, indexes = 1)
+# start = time.time()
+# euc = rs.euclidean_width_split(array, 5.0, 3, 4, True)
+# end = time.time()
+# print(end - start)
+#
+# with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/width_split_ttk.tif', 'w', **profile) as dst:
+#     dst.write(euc, indexes = 1)
 
 # pyplot.imshow(euc[0, :, :], cmap='bone')
 # pyplot.show()
