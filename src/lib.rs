@@ -834,7 +834,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     }
 
     fn get_main_dir(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>,
-                    shifts: &Vec<(isize, isize)>, dir1: usize, dir2: usize) -> ArrayView2<(usize, f64, f64)> {
+                    shifts: &Vec<(isize, isize)>, dir1: usize, dir2: usize, cellsize: f64) -> Array2<(usize, f64, f64)> {
 
         let shape = distance.raw_dim();
         let nrow = shape[0];
@@ -842,8 +842,11 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let ndirs = shifts.len();
         let ndirs2 = ndirs/2;
 
-        let main_dir = Array2::<(usize, f64, f64)>::new(shape);
-        let new_dir = Array2::from_elem(shape,true);
+        // dir, len, cossum
+        let result = Array2::<(usize, f64, f64)>::zeros(shape);
+
+        let mut new_dir = Array2::from_elem(shape,true);
+        let mut new_len = Array2::<f64>::zeros(shape);
 
         let mut sk: usize;
         let (mut ik, mut jk): (isize, isize);
@@ -891,15 +894,43 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         for sk in 0..sidx[k] {
                             ik = i + s[sk].0;
                             jk = j + s[sk].1;
+                            new_len[[ik, jk]] = length;
+
+                            if new_dir[[ik, jk]] {
+                                result[[ik, jk]].3 +=
+                                    f64::powi(
+                                    f64::cos(
+                                        f64::atan2(
+                                            h[k],
+                                            cellsize * get_length(
+                                                s[sidx[k]].0, s[sk].0, s[sidx[k]].1, s[sk].1
+                                                )
+                                            )
+                                        ),
+                                    2
+                                    );
+                                new_dir[[ik, jk]] = false;
+                            }
                         }
                     }
 
                 }
             }
+
+            for i in 0..nrow {
+                for j in 0..ncol {
+                    if new_len[[i, j]] > result[[i, j]].1 {
+                        result[[i, j]].1 = new_len[[i, j]];
+                        result[[i, j]].0 = dk;
+                    }
+                }
+            }
+
+            new_len.fill(0.0);
+            new_dir.fill(true);
+
         }
-
-        return main_dir
-
+        return result;
     }
 
     // wrapper of `euclidean_distance
