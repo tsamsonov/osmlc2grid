@@ -756,76 +756,76 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         i >= 0 && i < nrow as isize && j >= 0 && j < ncol as isize
     }
 
-    fn get_shifts_x(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
-        let dx = x1 - x0;
-        let mut dy = y1 - y0;
-        let mut yi = 1;
-        if dy < 0 {
-            yi = -1;
-            dy = -dy;
+    fn get_shifts_j(i0: isize, j0: isize, i1: isize, j1: isize) -> Vec<(isize, isize)> {
+        let dj = j1 - j0;
+        let mut di = i1 - i0;
+        let mut ij = 1;
+        if di < 0 {
+            ij = -1;
+            di = -di;
         }
 
-        let mut d = 2 * dy - dx;
-        let mut y = y0;
+        let mut d = 2 * di - dj;
+        let mut i = i0;
 
         let mut s = Vec::new();
 
-        for x in x0..x1 {
-            s.push((x,y));
+        for j in j0..j1 {
+            s.push((i, j));
             if d > 0 {
-                y += yi;
-                d += 2 * (dy - dx);
+                i += ij;
+                d += 2 * (di - dj);
             } else {
-                d += 2 * dy;
+                d += 2 * di;
             }
         }
 
         return s;
     }
 
-    fn get_shifts_y(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
-        let mut dx = x1 - x0;
-        let dy = y1 - y0;
-        let mut xi = 1;
-        if dx < 0 {
-            xi = -1;
-            dx = -dx;
+    fn get_shifts_i(i0: isize, j0: isize, i1: isize, j1: isize) -> Vec<(isize, isize)> {
+        let mut dj = j1 - j0;
+        let di = i1 - i0;
+        let mut ji = 1;
+        if dj < 0 {
+            ji = -1;
+            dj = -dj;
         }
 
-        let mut d = 2 * dx - dy;
-        let mut x = x0;
+        let mut d = 2 * dj - di;
+        let mut j = j0;
 
         let mut s = Vec::new();
 
-        for y in y0..y1 {
-            s.push((x,y));
+        for i in i0..i1 {
+            s.push((i, j));
             if d > 0 {
-                x += xi;
-                d += 2 * (dx - dy);
+                j += ji;
+                d += 2 * (dj - di);
             } else {
-                d += 2 * dx;
+                d += 2 * dj;
             }
         }
 
         return s;
     }
 
-    fn get_shifts(x0: isize, y0: isize, x1: isize, y1: isize) -> Vec<(isize, isize)> {
-        if (y1 - y0).abs() < (x1 - x0).abs() {
-            if x0 > x1 {
-                let mut shifts = get_shifts_x(x1, y1, x0, y0);
+    fn get_shifts(i0: isize, j0: isize, i1: isize, j1: isize) -> Vec<(isize, isize)> {
+        if (i1 - i0).abs() < (j1 - j0).abs() {
+            if j0 > j1 {
+                let mut shifts = get_shifts_j(i1, j1, i0, j0);
                 shifts.reverse();
                 shifts
             } else {
-                get_shifts_x(x0, y0, x1, y1)
+                get_shifts_j(i0, j0, i1, j1)
             } 
         } else {
-            if y0 > y1 {
-                let mut shifts = get_shifts_y(x1, y1, x0, y0);
+            if i0 > i1 {
+                let mut shifts = get_shifts_i(i1, j1, i0, j0);
                 shifts.reverse();
                 shifts
             } else {
-                return get_shifts_y(x0, y0, x1, y1)
+                get_shifts_i(i0, j0, i1, j1)
             }
         }
     }
@@ -866,6 +866,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
             for i in 0..nrow {
                 for j in 0..ncol {
+                    if distance[[i, j]] <= f64::EPSILON || new_len[[i, j]] > 0.0 {
+                        continue;
+                    }
+
                     sidx[0] = 0;
                     sidx[1] = 0;
                     h[0] = 0.0;
@@ -878,7 +882,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             if is_within(ik, jk, nrow, ncol) {
                                 uik = ik as usize;
                                 ujk = jk as usize;
-                                if distance[[uik, ujk]] < f64::EPSILON {
+                                if distance[[uik, ujk]] <= f64::EPSILON {
                                     sidx[k] = sk;
                                     h[k] = height[[uik, ujk]];
                                     break;
@@ -893,7 +897,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         }
                     }
 
-                    length = get_length(
+                    length = cellsize * get_length(
                         sh[0][sidx[0]].0, sh[0][sidx[0]].1,
                         sh[1][sidx[1]].0, sh[1][sidx[1]].1
                     );
@@ -903,7 +907,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         for sk in 0..sidx[k] {
                             uik = (i as isize + s[sk].0) as usize;
                             ujk = (j as isize + s[sk].1) as usize;
-                            new_len[[uik, ujk]] = length;
+
+                            if length > new_len[[uik, ujk]] {
+                                new_len[[uik, ujk]] = length;
+                            }
 
                             if new_dir[[uik, ujk]] {
                                 result[[uik, ujk]].2 +=
@@ -949,7 +956,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     }
 
     // possible numbers for discr: 1, 2, 3, 4, 5, 6, 9, 10, 12, 15, 18, 20, 30, 36, 45, 60, 90
-    fn euclidean_length_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, discr: usize, radius: f64, cellsize: f64) -> Array3<f64> {
+    fn euclidean_length_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, discr: f64, radius: f64, cellsize: f64) -> Array3<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
@@ -960,7 +967,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         let r = radius / cellsize;
         let mut a = 0.5 * PI;
-        let ndirs = 360 / discr;
+        let ndirs = (360.0 / discr) as usize;
         let (mut i, mut j): (isize, isize);
         let mut shifts = Vec::new();
 
@@ -1021,7 +1028,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             for i in 0..nrow {
                 for j in 0..ncol {
                     if add[[i, j]].1 > output[[1, i, j]] {
-                        output[[0, i, j]] = discr as f64 * add[[i, j]].0 as f64;
+                        output[[0, i, j]] = discr * add[[i, j]].0 as f64;
                         output[[1, i, j]] = add[[i, j]].1;
                     }
                     output[[2, i, j]] += 200.0 * add[[i, j]].2 / ndirs as f64;
@@ -1180,7 +1187,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         py: Python<'py>,
         distance: PyReadonlyArray2<'_, f64>,
         height: PyReadonlyArray2<'_, f64>,
-        discr: usize,
+        discr: f64,
         radius: f64,
         cellsize: f64
     ) -> &'py PyArray3<f64> {
