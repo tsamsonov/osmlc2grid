@@ -770,7 +770,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         let mut s = Vec::new();
 
-        for j in j0..j1 {
+        for j in j0..(j1+1) {
             s.push((i, j));
             if d > 0 {
                 i += ij;
@@ -797,7 +797,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         let mut s = Vec::new();
 
-        for i in i0..i1 {
+        for i in i0..(i1+1) {
             s.push((i, j));
             if d > 0 {
                 j += ji;
@@ -866,7 +866,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
             for i in 0..nrow {
                 for j in 0..ncol {
-                    if distance[[i, j]] <= f64::EPSILON || new_len[[i, j]] > 0.0 {
+                    if distance[[i, j]] <= f64::EPSILON || new_len[[i, j]] > f64::EPSILON {
                         continue;
                     }
 
@@ -904,6 +904,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                     for k in 0..2 {
                         let s = &sh[k];
+                        let s_inv = &sh[1-k];
                         for sk in 0..sidx[k] {
                             uik = (i as isize + s[sk].0) as usize;
                             ujk = (j as isize + s[sk].1) as usize;
@@ -912,20 +913,23 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                                 new_len[[uik, ujk]] = length;
                             }
 
-                            if new_dir[[uik, ujk]] {
-                                result[[uik, ujk]].2 +=
-                                    f64::powi(
-                                    f64::cos(
-                                        f64::atan2(
-                                            h[k],
-                                            cellsize * get_length(
-                                                s[sidx[k]].0, s[sidx[k]].1, s[sk].0, s[sk].1
-                                                )
-                                            )
-                                        ),
-                                    2
-                                    );
+                            if new_dir[[uik, ujk]] == true {
+
+                                let len = cellsize * get_length(
+                                    s[sidx[k]].0, s[sidx[k]].1, s[sk].0, s[sk].1
+                                );
+                                result[[uik, ujk]].2 += h[k].atan2(len).cos().powi(2);
+
+                                let len_inv = cellsize * get_length(
+                                    s_inv[sidx[1-k]].0, s_inv[sidx[1-k]].1, s[sk].0, s[sk].1
+                                );
+                                result[[uik, ujk]].2 += h[1-k].atan2(len_inv).cos().powi(2);
+
                                 new_dir[[uik, ujk]] = false;
+
+                                // if uik == 40 && ujk == 20 {
+                                //     println!("({}, {}, {})", dk, h[k], h[1-k])
+                                // }
                             }
                         }
                     }
@@ -978,10 +982,18 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             a -= PI * discr as f64 / 180.0;
         }
 
+        // for shift in &shifts {
+        //     for (i, j) in shift {
+        //         println!("{}, {}", i, j)
+        //     }
+        // }
+
         let arcdistance = distance.to_shared();
         let archeight = height.to_shared();
 
         let nproc = num_cpus::get_physical();
+        // let nproc = num_cpus::get();
+        // let nproc = 1_usize;
 
         let mut tasks = Vec::new();
 
@@ -1031,7 +1043,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         output[[0, i, j]] = discr * add[[i, j]].0 as f64;
                         output[[1, i, j]] = add[[i, j]].1;
                     }
-                    output[[2, i, j]] += 200.0 * add[[i, j]].2 / ndirs as f64;
+                    output[[2, i, j]] += 100.0 * add[[i, j]].2 / ndirs as f64;
                 }
             }
         }

@@ -16,9 +16,9 @@ height = src.read(1).astype('float64')
 profile = src.profile
 profile.update(count = 3, compress = 'lzw', dtype='int16')
 
-length = rs.euclidean_length_params(distance, height, 0.25, 5000, 5.0)
+length = rs.euclidean_length_params(distance, height, 0.25, 5000.0, 5.0)
 
-dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/length_fast.tif', 'w', **profile, BIGTIFF='YES')
+dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/length_ttk.tif', 'w', **profile, BIGTIFF='YES')
 dst.write(length)
 
 
