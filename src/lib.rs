@@ -305,6 +305,42 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output;
     }
 
+    fn raster_tiles(height: usize, width: usize, rows: usize, cols: usize, overlap: usize) -> Array3<usize> {
+
+        let (mut row1, mut row2, mut col1, mut col2): (usize, usize, usize, usize);
+
+        let mut output = Array3::<usize>::zeros((rows, cols, 8));
+
+        let drow = height / rows;
+        let dcol = width / cols;
+
+        row1 = 0;
+        row2 = drow + height % rows - 1;
+
+        for row in 0..rows {
+            col1 = 0;
+            col2 = dcol + width % cols - 1;
+
+            for col in 0..cols {
+                output[[row, col, 0]] = row1;
+                output[[row, col, 1]] = row2;
+                output[[row, col, 2]] = col1;
+                output[[row, col, 3]] = col2;
+                output[[row, col, 4]] = if row1 > overlap { row1 - overlap } else { 0 };
+                output[[row, col, 5]] = usize::min(height-1, row2 + overlap);
+                output[[row, col, 6]] = if col1 > overlap { col1 - overlap } else { 0 };
+                output[[row, col, 7]] = usize::min(width-1, col2 + overlap);
+                col1  = col2;
+                col2 += dcol;
+            }
+
+            row1  = row2;
+            row2 += drow;
+        }
+
+        return output;
+    }
+
     fn euclidean_width_tiles(distance: ArrayView2<'_, f64>, cellsize: f64, rows: usize, cols: usize, hard: bool) -> Array3<usize> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
@@ -834,7 +870,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         f64::sqrt(isize::pow(si1 - si2, 2) as f64 + isize::pow(sj1 - sj2, 2) as f64)
     }
 
-    fn main_dir_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, shifts: &Vec<Vec<(isize, isize)>>, dir1: usize, dir2: usize, cellsize: f64, progress: &ProgressBar) -> Array2<(usize, f64, f64)> {
+    fn main_dir_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, width: ArrayView2<'_, f64>, shifts: &Vec<Vec<(isize, isize)>>, dir1: usize, dir2: usize, cellsize: f64, progress: &ProgressBar) -> Array2<(isize, f64, f64)> {
 
         let shape = distance.raw_dim();
         let nrow = shape[0];
@@ -843,10 +879,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let ndirs2 = ndirs/2;
 
         // dir, len, cossum
-        let mut result = Array2::<(usize, f64, f64)>::from_elem(shape, (0, 0.0, 0.0));
+        let mut result = Array2::<(isize, f64, f64)>::from_elem(shape, (-1, -1.0, 0.0));
 
         let mut new_dir = Array2::from_elem(shape,true);
-        let mut new_len = Array2::<f64>::zeros(shape);
+        let mut new_len = Array2::<f64>::from_elem(shape, -1.0);
 
         let mut sk: usize;
         let (mut ik, mut jk): (isize, isize);
@@ -866,8 +902,16 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
             for i in 0..nrow {
                 for j in 0..ncol {
+
+                    progress.inc(1);
+
                     if distance[[i, j]] <= f64::EPSILON || new_len[[i, j]] > f64::EPSILON {
                         continue;
+                    }
+
+                    if width[[i, j]] >= 1000.0 {
+                        result[[i, j]].2 += 2.0;
+                        continue
                     }
 
                     sidx[0] = 0;
@@ -885,6 +929,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                                 if distance[[uik, ujk]] <= f64::EPSILON {
                                     sidx[k] = sk;
                                     h[k] = height[[uik, ujk]];
+                                    break;
+                                }
+
+                                if width[[uik, ujk]] >= 1000.0 {
+                                    sidx[k] = sk;
+                                    h[k] = 0.0;
                                     break;
                                 }
                             } else {
@@ -927,14 +977,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                                 new_dir[[uik, ujk]] = false;
 
+
+
                                 // if uik == 40 && ujk == 20 {
                                 //     println!("({}, {}, {})", dk, h[k], h[1-k])
                                 // }
                             }
                         }
                     }
-
-                    progress.inc(1);
                 }
             }
 
@@ -942,12 +992,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                 for j in 0..ncol {
                     if new_len[[i, j]] > result[[i, j]].1 {
                         result[[i, j]].1 = new_len[[i, j]];
-                        result[[i, j]].0 = dk;
+                        result[[i, j]].0 = dk as isize;
                     }
                 }
             }
 
-            new_len.fill(0.0);
+            new_len.fill(-1.0);
             new_dir.fill(true);
 
             cur_dir += 1;
@@ -960,14 +1010,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     }
 
     // possible numbers for discr: 1, 2, 3, 4, 5, 6, 9, 10, 12, 15, 18, 20, 30, 36, 45, 60, 90
-    fn euclidean_length_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, discr: f64, radius: f64, cellsize: f64) -> Array3<f64> {
+    fn euclidean_length_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, width: ArrayView2<'_, f64>, discr: f64, radius: f64, cellsize: f64) -> Array3<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
         let nelem = nrow * ncol;
 
         // let mut output = Array3::<f64>::zeros((5, nrow, ncol));
-        let mut output = Array3::<f64>::zeros((3, nrow, ncol));
+        let mut output = Array3::<f64>::from_elem((3, nrow, ncol), -1.0);
 
         let r = radius / cellsize;
         let mut a = 0.5 * PI;
@@ -990,6 +1040,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         let arcdistance = distance.to_shared();
         let archeight = height.to_shared();
+        let arcwidth = width.to_shared();
 
         let nproc = num_cpus::get_physical();
         // let nproc = num_cpus::get();
@@ -1022,11 +1073,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         for proc in 0..nproc {
             let distance_ref = arcdistance.clone();
             let height_ref = archeight.clone();
+            let width_ref = arcwidth.clone();
             let shifts_ref = shifts.clone();
             let bars_clone = bars.clone();
 
             tasks.push(thread::spawn(move || {
-                main_dir_params(distance_ref.view(), height_ref.view(), &shifts_ref, dir1, dir2, cellsize, &bars_clone[proc])
+                main_dir_params(distance_ref.view(), height_ref.view(), width_ref.view(), &shifts_ref, dir1, dir2, cellsize, &bars_clone[proc])
             }));
 
             dir1 = dir2;
@@ -1137,6 +1189,23 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         result.into_pyarray(py)
     }
 
+    // wrapper of `raster_tiles`
+    #[pyfn(m)]
+    #[pyo3(name = "raster_tiles")]
+    fn raster_tiles_py(
+        py: Python,
+        height: usize,
+        width: usize,
+        rows: usize,
+        cols: usize,
+        overlap: usize
+    ) -> &PyArray3<usize> {
+        let result = raster_tiles(
+            height, width, rows, cols, overlap
+        );
+        result.into_pyarray(py)
+    }
+
     // wrapper of `euclidean_width`
     #[pyfn(m)]
     #[pyo3(name = "euclidean_width_tiles")]
@@ -1199,14 +1268,16 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         py: Python<'py>,
         distance: PyReadonlyArray2<'_, f64>,
         height: PyReadonlyArray2<'_, f64>,
+        width: PyReadonlyArray2<'_, f64>,
         discr: f64,
         radius: f64,
         cellsize: f64
     ) -> &'py PyArray3<f64> {
         let distance = distance.as_array();
         let height = height.as_array();
+        let width = width.as_array();
         let result = euclidean_length_params(
-            distance.view(), height.view(), discr, radius, cellsize
+            distance.view(), height.view(), width.view(), discr, radius, cellsize
         );
         result.into_pyarray(py)
     }
