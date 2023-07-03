@@ -21,7 +21,7 @@ profile = src.profile
 # with open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/tiles_width.npy', 'wb') as dst:
 #     np.save(dst, tiles_width)
 
-tiles_length = rs.raster_tiles(profile['height'], profile['width'], 5, 5, 1000)
+tiles_length = rs.raster_tiles(profile['height'], profile['width'], 5, 5, 2000)
 with open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/tiles_length.npy', 'wb') as dst:
     np.save(dst, tiles_length)
 
