@@ -96,8 +96,77 @@ def union_rectangles_fastest(R):
     return area
 
 
+def grow_object(heights, objects, i, j, rows, cols, id):
+    objects[i, j] = id
+    for k in range(-1, 2):
+        for m in range(-1, 2):
+            ik = i + k
+            jm = j + m
+            if 0 <= ik < rows and 0 <= jm < cols:
+                if heights[ik, jm] > 0 and objects[ik, jm] == 0:
+                    grow_object(heights, objects, ik, jm, rows, cols, id)
+    return
+
+
+def mark_objects(heights):
+
+    shape = heights.shape
+    rows = shape[0]
+    cols = shape[1]
+
+    objects = np.zeros(shape, dtype=int)
+
+    id = 0
+
+    for i in range(rows):
+        for j in range(cols):
+            if heights[i, j] > 0 and objects[i, j] == 0:
+                id += 1
+                grow_object(heights, objects, i, j, rows, cols, id)
+
+    return objects
+
 def frontal_index(heights, azimuth, cellsize=1.0):
-    """Area of union of rectangles
+    """Frontal area index for individual buildings
+
+    :param heights: 2D numpy array with building elevations and np.isnan where masked
+    :param azimuth: geographic azimuth of the wind direction
+    :param cellsize: cell size of heights parameter
+    :returns: frontal area index
+    """
+    rad_dir = -math.pi * azimuth / 180.0
+    rcos = math.cos(rad_dir)
+    rsin = math.sin(rad_dir)
+
+    rotate = lambda pnt: rsin * pnt[0] - rcos * pnt[1]
+
+    ids = mark_objects(heights)
+    n = ids.max()
+
+    FAI = 0
+
+    for id in range(1, n+1):
+        pts = np.argwhere((heights > 0) & (ids == id))
+        x = np.array(list(map(rotate, pts)))
+        z = np.array(heights[pts[:, 0], pts[:, 1]])
+
+        delta = 0.5 * cellsize * math.sqrt(2) * math.fabs(math.cos(0.25 * math.pi - rad_dir % (0.5 * math.pi)))
+        x1 = x - delta
+        x2 = x + delta
+
+        rects = []
+        for i in range(len(x1)):
+            rects.append((x1[i], 0, x2[i], z[i]))
+
+        front = union_rectangles_fastest(rects)
+        volume = (cellsize ** 2) * np.count_nonzero(np.logical_not(np.isnan(heights))) * np.mean(z)
+
+        FAI += front / volume
+
+    return FAI
+
+def frontal_index_blocking(heights, azimuth, cellsize=1.0):
+    """Frontal area index with buildings blocking
 
     :param heights: 2D numpy array with building elevations and np.isnan where masked
     :param azimuth: geographic azimuth of the wind direction
@@ -123,6 +192,6 @@ def frontal_index(heights, azimuth, cellsize=1.0):
         rects.append((x1[i], 0, x2[i], z[i]))
 
     front = union_rectangles_fastest(rects)
-    volume = (cellsize ** 2) * np.count_nonzero(np.isnan(heights)) * np.mean(z)
+    volume = (cellsize ** 2) * np.count_nonzero(np.logical_not(np.isnan(heights))) * np.mean(z)
 
     return front / volume

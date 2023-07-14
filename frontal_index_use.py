@@ -17,15 +17,21 @@ mask_idx = np.argwhere(mask)
 subarray[mask_idx[:, 0], mask_idx[:, 1]] = None
 
 seq = np.array(list(range(0, 37))) * 5.0
-FI = []
+FAI = []
+FAIB = []
 
 for a in seq:
-    FI.append(fi.frontal_index(subarray, a, cellsize=5.0))
+    FAI.append(fi.frontal_index(subarray, a, cellsize=5.0))
+    FAIB.append(fi.frontal_index_blocking(subarray, a, cellsize=5.0))
 
 pyplot.imshow(subarray, cmap='bone')
 pyplot.show()
 
+pyplot.imshow(fi.mark_objects(subarray), cmap='bone')
+pyplot.show()
+
 fig = pyplot.figure()
 ax = pyplot.axes()
-ax.plot(seq, FI)
+ax.plot(seq, FAI)
+ax.plot(seq, FAIB)
 pyplot.show()
