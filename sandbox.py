@@ -7,30 +7,31 @@ from matplotlib import pyplot
 
 os.environ['USE_PYGEOS'] = '0'
 
-src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif')
-distance = src.read(1).astype('float64')
-
-src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/allocation_ttk.tif')
-height = src.read(1).astype('float64')
-
-profile = src.profile
-profile.update(count = 3, compress = 'lzw', dtype='int16')
-
-length = rs.euclidean_length_params(distance, height, 0.25, 5000.0, 5.0)
-
-dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/length_ttk.tif', 'w', **profile, BIGTIFF='YES')
-dst.write(length)
+# src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance_ttk.tif')
+# distance = src.read(1).astype('float64')
+#
+# src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/allocation_ttk.tif')
+# height = src.read(1).astype('float64')
+#
+# profile = src.profile
+# profile.update(count = 3, compress = 'lzw', dtype='int16')
+#
+# length = rs.euclidean_length_params(distance, height, 0.25, 5000.0, 5.0)
+#
+# dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/length_ttk.tif', 'w', **profile, BIGTIFF='YES')
+# dst.write(length)
 
 
 
 # start = time.time()
 # src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/heights.tif')
 # src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/blds_5m.tif')
-# src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/fids_ttk.tif')
+src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/fids_ttk.tif')
+
 # profile = src.profile
 # profile.update(count = 1, compress = 'lzw')
 #
-# array = src.read(1).astype('float64')
+array = src.read(1).astype('float64')
 # end = time.time()
 # print(end - start)
 
@@ -51,10 +52,10 @@ dst.write(length)
 #     dst.write(euc, indexes = 1)
 #
 #
-# start = time.time()
-# euc = rs.euclidean_width(array, 5.0)
-# end = time.time()
-# print(end - start)
+start = time.time()
+euc = rs.euclidean_width_params(array, 5.0, 0)
+end = time.time()
+print(end - start)
 #
 # with rasterio.open('/Users/tsamsonov/GitHub/osmlc2grid/data/width.tif', 'w', **profile) as dst:
 #     dst.write(euc, indexes = 1)

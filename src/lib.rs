@@ -226,7 +226,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         &distance / (&distance + &anti_distance)
     }
 
-    fn euclidean_width(distance: ArrayView2<'_, f64>, cellsize: f64) -> Array2<f64> {
+    fn euclidean_width(distance: ArrayView2<'_, f64>, cellsize: f64, maxwidth: f64) -> Array2<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
@@ -260,6 +260,10 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                 while queue.len() > 0 {
                     let (ord_radius, i, j) = queue.pop().unwrap();
+
+                    if output_ref[[i, j]] > maxwidth {
+                        continue;
+                    }
 
                     radius = f64::from(ord_radius);
 
@@ -551,7 +555,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output;
     }
 
-    fn euclidean_width_split(distance: ArrayView2<'_, f64>, cellsize: f64, rows: usize, cols: usize, hard: bool) -> Array2<f64> {
+    fn euclidean_width_split(distance: ArrayView2<'_, f64>, cellsize: f64, rows: usize, cols: usize, hard: bool, maxwidth: f64) -> Array2<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
@@ -571,7 +575,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     tile[5] - tile[4], tile[7] - tile[6]
                 );
 
-                let width = euclidean_width(distance.slice(s![tile[4]..tile[5], tile[6]..tile[7]]), cellsize);
+                let width = euclidean_width(distance.slice(s![tile[4]..tile[5], tile[6]..tile[7]]), cellsize, maxwidth);
 
                 for i in tile[0]..tile[1] {
                     for j in tile[2]..tile[3] {
@@ -584,7 +588,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output;
     }
 
-    fn euclidean_width_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, cellsize: f64) -> Array3<f64> {
+    fn euclidean_width_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, cellsize: f64, maxwidth: f64) -> Array3<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
@@ -649,7 +653,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     let (ord_radius, i, j) = queue.pop().unwrap();
                     // radius = f64::min(500.0, f64::from(ord_radius));
 
-                    if output_ref[[0, i, j]] >= 1000.0 {
+                    if output_ref[[0, i, j]] > maxwidth {
                         continue;
                     }
 
@@ -730,7 +734,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output
     }
 
-    fn euclidean_width_params_split(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, cellsize: f64, rows: usize, cols: usize, hard: bool) -> Array3<f64> {
+    fn euclidean_width_params_split(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, cellsize: f64, rows: usize, cols: usize, hard: bool, maxwidth: f64) -> Array3<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
@@ -760,7 +764,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                 let params = euclidean_width_params(
                     distance.slice(s![tile[4]..tile[5], tile[6]..tile[7]]),
                     height.slice(s![tile[4]..tile[5], tile[6]..tile[7]]),
-                    cellsize
+                    cellsize, maxwidth
                 );
 
                 // let ecols = tile[7] - tile[6];
@@ -1156,39 +1160,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         result.into_pyarray(py)
     }
 
-    // wrapper of `euclidean_width`
-    #[pyfn(m)]
-    #[pyo3(name = "euclidean_width")]
-    fn euclidean_width_py<'py>(
-        py: Python<'py>,
-        source: PyReadonlyArray2<'_, f64>,
-        cellsize: f64
-    ) -> &'py PyArray2<f64> {
-        let source = source.as_array();
-        let dist = euclidean_distance(source, cellsize);
-        let result = euclidean_width(dist.view(), cellsize);
-        result.into_pyarray(py)
-    }
-
-    // wrapper of `euclidean_width`
-    #[pyfn(m)]
-    #[pyo3(name = "euclidean_width_split")]
-    fn euclidean_width_split_py<'py>(
-        py: Python<'py>,
-        source: PyReadonlyArray2<'_, f64>,
-        cellsize: f64,
-        rows: usize,
-        cols: usize,
-        hard: bool
-    ) -> &'py PyArray2<f64> {
-        let source = source.as_array();
-        let dist = euclidean_distance(source, cellsize);
-        let result = euclidean_width_split(
-            dist.view(), cellsize, rows, cols, hard
-        );
-        result.into_pyarray(py)
-    }
-
     // wrapper of `raster_tiles`
     #[pyfn(m)]
     #[pyo3(name = "raster_tiles")]
@@ -1202,6 +1173,43 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     ) -> &PyArray3<usize> {
         let result = raster_tiles(
             height, width, rows, cols, overlap
+        );
+        result.into_pyarray(py)
+    }
+
+    // wrapper of `euclidean_width`
+    #[pyfn(m)]
+    #[pyo3(name = "euclidean_width")]
+    fn euclidean_width_py<'py>(
+        py: Python<'py>,
+        source: PyReadonlyArray2<'_, f64>,
+        cellsize: f64,
+        maxwidth: f64
+    ) -> &'py PyArray2<f64> {
+        let source = source.as_array();
+        let dist = euclidean_distance(source, cellsize);
+        let maxwidth = if maxwidth < 0.0 { f64::INFINITY } else { maxwidth };
+        let result = euclidean_width(dist.view(), cellsize, maxwidth);
+        result.into_pyarray(py)
+    }
+
+    // wrapper of `euclidean_width`
+    #[pyfn(m)]
+    #[pyo3(name = "euclidean_width_split")]
+    fn euclidean_width_split_py<'py>(
+        py: Python<'py>,
+        source: PyReadonlyArray2<'_, f64>,
+        cellsize: f64,
+        rows: usize,
+        cols: usize,
+        hard: bool,
+        maxwidth: f64
+    ) -> &'py PyArray2<f64> {
+        let source = source.as_array();
+        let dist = euclidean_distance(source, cellsize);
+        let maxwidth = if maxwidth < 0.0 { f64::INFINITY } else { maxwidth };
+        let result = euclidean_width_split(
+            dist.view(), cellsize, rows, cols, hard, maxwidth
         );
         result.into_pyarray(py)
     }
@@ -1230,13 +1238,15 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     fn euclidean_width_params_py<'py>(
         py: Python<'py>,
         source: PyReadonlyArray2<'_, f64>,
-        cellsize: f64
+        cellsize: f64,
+        maxwidth: f64
     ) -> &'py PyArray3<f64> {
         let source = source.as_array();
         let distance = euclidean_distance(source, cellsize);
         let height = euclidean_allocation(source, cellsize);
+        let maxwidth = if maxwidth < 0.0 { f64::INFINITY } else { maxwidth };
         let result = euclidean_width_params(
-            distance.view(), height.view(), cellsize
+            distance.view(), height.view(), cellsize, maxwidth
         );
         result.into_pyarray(py)
     }
@@ -1251,12 +1261,14 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         cellsize: f64,
         rows: usize,
         cols: usize,
-        hard: bool
+        hard: bool,
+        maxwidth: f64
     ) -> &'py PyArray3<f64> {
         let distance = distance.as_array();
         let height = allocation.as_array();
+        let maxwidth = if maxwidth < 0.0 { f64::INFINITY } else { maxwidth };
         let result = euclidean_width_params_split(
-            distance.view(), height.view(), cellsize, rows, cols, hard
+            distance.view(), height.view(), cellsize, rows, cols, hard, maxwidth
         );
         result.into_pyarray(py)
     }
