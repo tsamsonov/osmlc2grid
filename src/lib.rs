@@ -238,10 +238,13 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let nproc = num_cpus::get_physical();
 
         let mut tasks = Vec::new();
+        let m = MultiProgress::new();
+        let bars = get_progress_bars(&m, nproc);
 
         for proc in 0..nproc {
             let mut output_ref = arcoutput.clone();
             let input_ref = arcinput.clone();
+            let bars_clone = bars.clone();
 
             tasks.push(thread::spawn(move || {
                 let mut radius: f64;
@@ -258,14 +261,19 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     }
                 }
 
+                bars_clone[proc].set_length(queue.len() as u64);
+
                 while queue.len() > 0 {
                     let (ord_radius, i, j) = queue.pop().unwrap();
+
+                    radius = f64::from(ord_radius);
+
+                    bars_clone[proc].inc(1);
+                    bars_clone[proc].set_message(format!("radius = {}", radius));
 
                     if output_ref[[i, j]] > maxwidth {
                         continue;
                     }
-
-                    radius = f64::from(ord_radius);
 
                     w = (radius / cellsize).floor() as isize;
 
@@ -291,9 +299,13 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                     }
                 }
 
+                bars_clone[proc].finish_with_message("done");
+
                 return output_ref;
             }))
         }
+
+        m.clear().unwrap();
 
         for task in tasks {
             let add = task.join().unwrap();
@@ -588,6 +600,25 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         return output;
     }
 
+    fn get_progress_bars(m: &MultiProgress, nproc: usize) -> Vec<ProgressBar> {
+        let sty = ProgressStyle::with_template(
+            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
+        ).unwrap();
+            // .progress_chars("##-");
+
+        let mut bars: Vec<ProgressBar> = Vec::new();
+        let pb = m.add(ProgressBar::new(100));
+        pb.set_style(sty.clone());
+        bars.push(pb);
+
+        for proc in 1..nproc {
+            let pb = m.insert_after(&bars[proc-1], ProgressBar::new(100));
+            pb.set_style(sty.clone());
+            bars.push(pb);
+        }
+        return bars;
+    }
+
     fn euclidean_width_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, cellsize: f64, maxwidth: f64) -> Array3<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
@@ -605,21 +636,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let mut tasks = Vec::new();
 
         let m = MultiProgress::new();
-        let sty = ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        ).unwrap()
-         .progress_chars("##-");
-
-        let mut bars: Vec<ProgressBar> = Vec::new();
-        let pb = m.add(ProgressBar::new(100));
-        pb.set_style(sty.clone());
-        bars.push(pb);
-
-        for proc in 1..nproc {
-            let pb = m.insert_after(&bars[proc-1], ProgressBar::new(100));
-            pb.set_style(sty.clone());
-            bars.push(pb);
-        }
+        let bars = get_progress_bars(&m, nproc);
 
         for proc in 0..nproc {
             let mut output_ref = arcoutput.clone();
@@ -642,8 +659,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                         if distance_ref[[i, j]] > 0.0 {
                             queue.push((OrderedFloat(distance_ref[[i, j]]), i, j));
                         }
-                        // output_ref[[0, i, j]] = -1.0;
-                        // output_ref[[1, i, j]] = -1.0;
                     }
                 }
 
@@ -651,16 +666,15 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                 while queue.len() > 0 {
                     let (ord_radius, i, j) = queue.pop().unwrap();
-                    // radius = f64::min(500.0, f64::from(ord_radius));
-
-                    if output_ref[[0, i, j]] > maxwidth {
-                        continue;
-                    }
 
                     radius = f64::from(ord_radius);
 
                     bars_clone[proc].inc(1);
                     bars_clone[proc].set_message(format!("radius = {}", radius));
+
+                    if output_ref[[0, i, j]] > maxwidth {
+                        continue;
+                    }
 
                     let mut covered: Vec<(usize, usize)> = Vec::new();
 
@@ -741,12 +755,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let mut output = Array3::<f64>::zeros((2, nrow, ncol));
         // let mut output = Array3::<f64>::zeros((5, nrow, ncol));
 
-        // for i in 0..nrow {
-        //     for j in 0..ncol {
-        //         output[[0, i, j]] = -1.0;
-        //     }
-        // }
-
         let tiles = euclidean_width_tiles(distance, cellsize, rows, cols, hard);
 
         for row in 0..rows {
@@ -785,7 +793,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                     }
                 }
-                println!("{}, {}", row, col);
             }
         }
 
@@ -978,14 +985,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                                     s_inv[sidx[1-k]].0, s_inv[sidx[1-k]].1, s[sk].0, s[sk].1
                                 );
                                 result[[uik, ujk]].2 += h[1-k].atan2(len_inv).cos().powi(2);
-
                                 new_dir[[uik, ujk]] = false;
-
-
-
-                                // if uik == 40 && ujk == 20 {
-                                //     println!("({}, {}, {})", dk, h[k], h[1-k])
-                                // }
                             }
                         }
                     }
@@ -1018,7 +1018,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
-        let nelem = nrow * ncol;
 
         // let mut output = Array3::<f64>::zeros((5, nrow, ncol));
         let mut output = Array3::<f64>::from_elem((3, nrow, ncol), -1.0);
@@ -1036,38 +1035,16 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             a -= PI * discr as f64 / 180.0;
         }
 
-        // for shift in &shifts {
-        //     for (i, j) in shift {
-        //         println!("{}, {}", i, j)
-        //     }
-        // }
-
         let arcdistance = distance.to_shared();
         let archeight = height.to_shared();
         let arcwidth = width.to_shared();
 
         let nproc = num_cpus::get_physical();
-        // let nproc = num_cpus::get();
-        // let nproc = 1_usize;
 
         let mut tasks = Vec::new();
 
         let m = MultiProgress::new();
-        let sty = ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}",
-        ).unwrap()
-            .progress_chars("##-");
-
-        let mut bars: Vec<ProgressBar> = Vec::new();
-        let pb = m.add(ProgressBar::new(nelem as u64));
-        pb.set_style(sty.clone());
-        bars.push(pb);
-
-        for proc in 1..nproc {
-            let pb = m.insert_after(&bars[proc - 1], ProgressBar::new(nelem as u64));
-            pb.set_style(sty.clone());
-            bars.push(pb);
-        }
+        let bars = get_progress_bars(&m, nproc);
 
         let proc_dirs = ndirs / (2 * nproc);
 
@@ -1106,7 +1083,6 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
         return output;
     }
-
 
     // wrapper of `euclidean_distance
     #[pyfn(m)]

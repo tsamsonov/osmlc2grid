@@ -53,7 +53,7 @@ array = src.read(1).astype('float64')
 #
 #
 start = time.time()
-euc = rs.euclidean_width_params(array, 5.0, 0)
+euc = rs.euclidean_width(array, 5, -1)
 end = time.time()
 print(end - start)
 #
