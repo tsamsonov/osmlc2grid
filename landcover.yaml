@@ -1,0 +1,78 @@
+buildings:
+  - BUILDING
+roads:
+  - HIGHWAY
+grass:
+  - LANDUSE:
+    - grass
+    - grassland
+    - meadow
+  - SURFACE:
+    - grass
+  - NATURAL:
+    - grassland
+tall vegetation:
+  - WOOD
+  - LANDUSE:
+    - forest
+    - logging
+  - NATURAL:
+    - tree
+    - tree_row
+    - wood
+mixed vegetation:
+  - LANDUSE:
+    - orchard
+    - vineyard
+    - scrub
+    - farm
+    - farmland
+    - greenfield
+    - cemetery
+    - garden
+    - park
+    - natural_reserve
+  - NATURAL:
+      - scrub
+surface:
+  LANDUSE:
+    - parking
+  SURFACE:
+    - asphalt
+    - asphalt:compacted
+    - asphalt:concrete
+    - asphalt:gravel
+    - brick
+    - cobblestone
+    - concrete
+    - concrete:lanes
+    - condrete:plates
+    - granite
+    - paved
+    - paving_stones
+    - pebblestone
+    - stone
+water:
+  - WATERWAY
+  - NATURAL:
+    - water
+    - waterway
+    - wetland
+  - LANDUSE:
+    - reservoir
+industrial:
+  - LANDUSE:
+    - construction
+    - garage
+    - garages
+    - industrial
+    - military
+    - railway
+    - retail
+    - depot
+    - commercial
+residential
+  - LANDUSE:
+    - residential
+    - allotments
+
