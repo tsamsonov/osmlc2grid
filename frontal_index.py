@@ -126,6 +126,23 @@ def mark_objects(heights):
 
     return objects
 
+
+def frontal_index_surface(heights, azimuth, cellsize=1.0):
+    """Frontal area index for all surfaces
+
+    :param heights: 2D numpy array with building elevations and np.isnan where masked
+    :param azimuth: geographic azimuth of the wind direction
+    :param cellsize: cell size of heights parameter
+    :returns: frontal area index
+    """
+    rad_dir = -math.pi * azimuth / 180.0
+    rcos = math.cos(rad_dir)
+    rsin = math.sin(rad_dir)
+
+    FAI = 0
+
+    return FAI
+
 def frontal_index(heights, azimuth, cellsize=1.0):
     """Frontal area index for individual buildings
 
