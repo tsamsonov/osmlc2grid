@@ -138,8 +138,26 @@ def frontal_index_surface(heights, azimuth, cellsize=1.0):
     rad_dir = -math.pi * azimuth / 180.0
     rcos = math.cos(rad_dir)
     rsin = math.sin(rad_dir)
+    dir  = np.array([-rcos, -rsin, 0])
 
-    FAI = 0
+    fx = np.gradient(heights, cellsize, axis=0)
+    fy = np.gradient(heights, cellsize, axis=1)
+    fz = np.ones_like(fy)
+    fz[np.logical_or(np.isnan(fx), np.isnan(fy))] = None
+
+    length = np.sqrt(np.square(fx) + np.square(fy) + np.square(fz))
+    fx_norm = np.divide(fx, length)
+    fy_norm = np.divide(fy, length)
+    fz_norm = np.divide(fz, length)
+
+    norm = np.stack([fx_norm, fy_norm, fz_norm], axis=2)
+    prj = np.dot(norm, dir)
+
+    exp = cellsize * np.multiply(prj, heights)
+
+    volume = (cellsize ** 2) * np.count_nonzero(np.logical_not(np.isnan(heights))) * np.mean(heights[heights > 0])
+
+    FAI = -np.sum(exp[exp < 0]) / volume
 
     return FAI
 

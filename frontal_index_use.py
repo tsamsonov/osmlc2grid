@@ -19,10 +19,12 @@ subarray[mask_idx[:, 0], mask_idx[:, 1]] = None
 seq = np.array(list(range(0, 37))) * 5.0
 FAI = []
 FAIB = []
+FAIS = []
 
 for a in seq:
     FAI.append(fi.frontal_index(subarray, a, cellsize=5.0))
     FAIB.append(fi.frontal_index_blocking(subarray, a, cellsize=5.0))
+    FAIS.append(fi.frontal_index_surface(subarray, a, cellsize=5.0))
 
 pyplot.imshow(subarray, cmap='bone')
 pyplot.show()
@@ -34,4 +36,5 @@ fig = pyplot.figure()
 ax = pyplot.axes()
 ax.plot(seq, FAI)
 ax.plot(seq, FAIB)
+ax.plot(seq, FAIS)
 pyplot.show()
