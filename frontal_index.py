@@ -135,8 +135,10 @@ def exp(heights, azimuth, cellsize=1.0):
     rsin = math.sin(rad_dir)
     dir = np.array([rcos, rsin])
 
-    fx = np.gradient(heights, 0.5, axis=1)
-    fy = np.gradient(heights, 0.5, axis=0)
+    grad_heights = np.nan_to_num(heights)
+
+    fx = np.gradient(grad_heights, 0.5, axis=1)
+    fy = np.gradient(grad_heights, 0.5, axis=0)
 
     norm = np.stack([fx, fy], axis=2)
 
@@ -144,7 +146,7 @@ def exp(heights, azimuth, cellsize=1.0):
 
     exp = cellsize * prj * (heights > 0)
 
-    return exp
+    return fx * (heights > 0)
 
 
 def frontal_index_surface(heights, azimuth, cellsize=1.0):
@@ -161,8 +163,11 @@ def frontal_index_surface(heights, azimuth, cellsize=1.0):
     rsin = math.sin(rad_dir)
     dir  = np.array([rcos, rsin])
 
-    fx = np.gradient(heights, 0.5, axis=1)
-    fy = np.gradient(heights, 0.5, axis=0)
+
+    grad_heights = np.nan_to_num(heights)
+
+    fx = np.gradient(grad_heights, 0.5, axis=1)
+    fy = np.gradient(grad_heights, 0.5, axis=0)
 
     norm = np.stack([fx, fy], axis=2)
     prj = np.dot(norm, dir)
@@ -208,6 +213,9 @@ def frontal_index(heights, azimuth, cellsize=1.0):
 
         front = cellsize * union_rectangles_fastest(rects)
 
+        if azimuth == 90:
+            print(front)
+
         FAI += front
 
     volume = (cellsize ** 2) * np.count_nonzero(np.logical_not(np.isnan(heights))) * np.mean(heights[heights > 0])
@@ -233,6 +241,8 @@ def frontal_index_blocking(heights, azimuth, cellsize=1.0):
     pts = np.argwhere(heights > 0)
     x = np.array(list(map(rotate, pts)))
     z = np.array(heights[pts[:, 0], pts[:, 1]])
+
+    # print(x)
 
     delta = 0.5 * math.sqrt(2) * math.fabs(math.cos(0.25 * math.pi - rad_dir % (0.5 * math.pi)))
     x1 = x - delta
