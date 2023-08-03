@@ -137,8 +137,29 @@ def exp(heights, azimuth, cellsize=1.0):
 
     grad_heights = np.nan_to_num(heights)
 
+    roll_x = np.roll(grad_heights, 1, axis=1)
+    roll_y = np.roll(grad_heights, 1, axis=0)
+
     fx = np.gradient(grad_heights, 0.5, axis=1)
     fy = np.gradient(grad_heights, 0.5, axis=0)
+
+    flt1 = (fx == 0) & (fy != 0) & (roll_x == 0)
+    flt2 = (fx != 0) & (fy == 0) & (roll_y == 0)
+    flt3 = (fx == 0) & (fy == 0) & (roll_x == 0) & (roll_y == 0) & (heights != 0)
+
+    if azimuth < 180:
+        fx[flt1] = np.abs(fy[flt1])
+        fx[flt3] = heights[flt3]
+    else:
+        fx[flt1] = -np.abs(fy[flt1])
+        fx[flt3] = -heights[flt3]
+
+    if 90 < azimuth < 270:
+        fy[flt2] = np.abs(fx[flt2])
+        fy[flt3] = heights[flt3]
+    else:
+        fy[flt2] = -np.abs(fx[flt2])
+        fy[flt3] = -heights[flt3]
 
     norm = np.stack([fx, fy], axis=2)
 
@@ -146,7 +167,7 @@ def exp(heights, azimuth, cellsize=1.0):
 
     exp = cellsize * prj * (heights > 0)
 
-    return fx * (heights > 0)
+    return exp
 
 
 def frontal_index_surface(heights, azimuth, cellsize=1.0):
@@ -161,16 +182,38 @@ def frontal_index_surface(heights, azimuth, cellsize=1.0):
 
     rcos = math.cos(rad_dir)
     rsin = math.sin(rad_dir)
-    dir  = np.array([rcos, rsin])
-
+    dir = np.array([rcos, rsin])
 
     grad_heights = np.nan_to_num(heights)
+
+    roll_x = np.roll(grad_heights, 1, axis=1)
+    roll_y = np.roll(grad_heights, 1, axis=0)
 
     fx = np.gradient(grad_heights, 0.5, axis=1)
     fy = np.gradient(grad_heights, 0.5, axis=0)
 
+    flt1 = (fx == 0) & (fy != 0) & (roll_x == 0)
+    flt2 = (fx != 0) & (fy == 0) & (roll_y == 0)
+    flt3 = (fx == 0) & (fy == 0) & (roll_x == 0) & (roll_y == 0) & (heights != 0)
+
+    if azimuth < 180:
+        fx[flt1] = np.abs(fy[flt1])
+        fx[flt3] = heights[flt3]
+    else:
+        fx[flt1] = -np.abs(fy[flt1])
+        fx[flt3] = -heights[flt3]
+
+    if 90 < azimuth < 270:
+        fy[flt2] = np.abs(fx[flt2])
+        fy[flt3] = heights[flt3]
+    else:
+        fy[flt2] = -np.abs(fx[flt2])
+        fy[flt3] = -heights[flt3]
+
     norm = np.stack([fx, fy], axis=2)
+
     prj = np.dot(norm, dir)
+
     exp = cellsize * prj * (heights > 0)
 
     volume = (cellsize ** 2) * np.count_nonzero(np.logical_not(np.isnan(heights))) * np.mean(heights[heights > 0])
