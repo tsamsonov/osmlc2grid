@@ -127,6 +127,26 @@ def mark_objects(heights):
     return objects
 
 
+def exp(heights, azimuth, cellsize=1.0):
+
+    rad_dir = math.pi * (azimuth / 180.0 - 0.5)
+
+    rcos = math.cos(rad_dir)
+    rsin = math.sin(rad_dir)
+    dir = np.array([rcos, rsin])
+
+    fx = np.gradient(heights, 0.5, axis=1)
+    fy = np.gradient(heights, 0.5, axis=0)
+
+    norm = np.stack([fx, fy], axis=2)
+
+    prj = np.dot(norm, dir)
+
+    exp = cellsize * prj * (heights > 0)
+
+    return exp
+
+
 def frontal_index_surface(heights, azimuth, cellsize=1.0):
     """Frontal area index for all surfaces
 
@@ -135,22 +155,18 @@ def frontal_index_surface(heights, azimuth, cellsize=1.0):
     :param cellsize: cell size of heights parameter
     :returns: frontal area index
     """
-    rad_dir = -math.pi * azimuth / 180.0
+    rad_dir = math.pi * (azimuth / 180.0 - 0.5)
+
     rcos = math.cos(rad_dir)
     rsin = math.sin(rad_dir)
-    dir  = np.array([-rcos, -rsin])
+    dir  = np.array([rcos, rsin])
 
-    fx = np.gradient(heights, cellsize, axis=0)
-    fy = np.gradient(heights, cellsize, axis=1)
-    length = np.sqrt(np.square(fx) + np.square(fy))
-
-    div = np.nonzero(length > 0)
-    fx[div] /= length[div]
-    fy[div] /= length[div]
+    fx = np.gradient(heights, 0.5, axis=1)
+    fy = np.gradient(heights, 0.5, axis=0)
 
     norm = np.stack([fx, fy], axis=2)
     prj = np.dot(norm, dir)
-    exp = cellsize * np.multiply(prj, heights)
+    exp = cellsize * prj * (heights > 0)
 
     volume = (cellsize ** 2) * np.count_nonzero(np.logical_not(np.isnan(heights))) * np.mean(heights[heights > 0])
     FAI = np.sum(exp[exp > 0]) / volume
