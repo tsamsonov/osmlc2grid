@@ -10,7 +10,9 @@ os.environ['USE_PYGEOS'] = '0'
 src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/mask_5m_small_blds.tif')
 array = src.read(1).astype('float64')
 
-subarray = array[485:555, 610:680]
+# subarray = array[485:555, 610:680] // XO SHI MIN
+
+subarray = array[340:410, 475:545]
 
 mask = np.fromfunction(lambda i, j: abs(i-35) + abs(j-35) >= 35, subarray.shape, dtype=int)
 mask_idx = np.argwhere(mask)
@@ -22,25 +24,24 @@ FAIB = []
 FAIS = []
 
 for a in seq:
-    FAI.append(fi.frontal_index(subarray, a, cellsize=5.0))
-    FAIB.append(fi.frontal_index_blocking(subarray, a, cellsize=5.0))
-    FAIS.append(fi.frontal_index_surface(subarray, a, cellsize=5.0))
-
+    FAI.append(fi.fai_buildings(subarray, a, cellsize=5.0))
+    FAIB.append(fi.fai_blocking(subarray, a, cellsize=5.0))
+    FAIS.append(fi.fai_walls(subarray, a, cellsize=5.0))
 
 pyplot.imshow(subarray, cmap='bone')
 pyplot.show()
 
-pyplot.imshow(fi.mark_objects(subarray), cmap='bone')
-pyplot.show()
+# pyplot.imshow(fi.mark_objects(subarray), cmap='bone')
+# pyplot.show()
 
-exp = fi.exp(subarray, 90, cellsize=5.0)
-pyplot.imshow(exp, cmap='bone')
-pyplot.show()
+# exp = fi.exp(subarray, 90, cellsize=5.0)
+# pyplot.imshow(exp, cmap='bone')
+# pyplot.show()
 
 fig = pyplot.figure()
 ax = pyplot.axes()
-ax.plot(seq, FAI, label='FAI non-blocking')
-ax.plot(seq, FAIS, label='FAI surface')
+ax.plot(seq, FAIS, label='FAI walls')
+ax.plot(seq, FAI, label='FAI buildings')
 ax.plot(seq, FAIB, label='FAI blocking')
 ax.set_ylim(bottom=0)
 ax.legend()
