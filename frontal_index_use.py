@@ -21,20 +21,25 @@ FAI = []
 FAIB = []
 FAIS = []
 
+# exp = fi.frontal_index_surface(subarray, 90, cellsize=5.0)
+# pyplot.imshow(exp, cmap='bone')
+# pyplot.show()
+
 for a in seq:
     FAI.append(fi.frontal_index(subarray, a, cellsize=5.0))
     FAIB.append(fi.frontal_index_blocking(subarray, a, cellsize=5.0))
     FAIS.append(fi.frontal_index_surface(subarray, a, cellsize=5.0))
 
-pyplot.imshow(subarray, cmap='bone')
-pyplot.show()
-
-pyplot.imshow(fi.mark_objects(subarray), cmap='bone')
-pyplot.show()
+# pyplot.imshow(subarray, cmap='bone')
+# pyplot.show()
+#
+# pyplot.imshow(fi.mark_objects(subarray), cmap='bone')
+# pyplot.show()
 
 fig = pyplot.figure()
 ax = pyplot.axes()
-ax.plot(seq, FAI)
-ax.plot(seq, FAIB)
-ax.plot(seq, FAIS)
+ax.plot(seq, FAI, label='FAI non-blocking')
+ax.plot(seq, FAIS, label='FAI surface')
+ax.plot(seq, FAIB, label='FAI blocking')
+ax.legend()
 pyplot.show()
