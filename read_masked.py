@@ -23,5 +23,3 @@ subarray = read_masked(src, lon, lat)
 
 pyplot.imshow(subarray[0, :, :], cmap='bone')
 pyplot.show()
-
-

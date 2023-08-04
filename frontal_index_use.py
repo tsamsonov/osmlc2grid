@@ -10,13 +10,15 @@ os.environ['USE_PYGEOS'] = '0'
 src = rasterio.open('/Volumes/Work/__UCLIM/Kosheleva/mask_5m_small_blds.tif')
 array = src.read(1).astype('float64')
 
-# subarray = array[485:555, 610:680] // XO SHI MIN
+flt = True
 
-subarray = array[340:410, 475:545]
+subarray = array[485:555, 610:680] # XO SHI MIN
+# subarray = array[340:410, 475:545] # FIAN
 
-mask = np.fromfunction(lambda i, j: abs(i-35) + abs(j-35) >= 35, subarray.shape, dtype=int)
-mask_idx = np.argwhere(mask)
-subarray[mask_idx[:, 0], mask_idx[:, 1]] = None
+if flt:
+    mask = np.fromfunction(lambda i, j: abs(i-35) + abs(j-35) >= 35, subarray.shape, dtype=int)
+    mask_idx = np.argwhere(mask)
+    subarray[mask_idx[:, 0], mask_idx[:, 1]] = None
 
 seq = np.array(list(range(0, 37))) * 5.0
 FAI = []
