@@ -5,8 +5,8 @@ import rasterio
 import rasterspace as rs
 import numpy as np
 
-# src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/heights.tif')
-# profile = src.profile
+src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/heights.tif')
+profile = src.profile
 # array = src.read(1).astype('float64')
 #
 # euc = rs.euclidean_distance(array, 5.0)
@@ -26,36 +26,53 @@ import numpy as np
 #     np.save(dst, tiles_length)
 
 
-# band_names = [
-#     'Building height',
-#     'Canyon width',
-#     'Canyon height',
-#     'Canyon direction',
-#     'Canyon length',
-#     'Sky view factor'
-# ]
+band_names = [
+    'Building height',
+    'Canyon width',
+    'Canyon height',
+    'Canyon direction',
+    'Canyon length',
+    'Sky view factor',
+    'Worldcover'
+]
 
-# N = len(band_names)
-# profile.update(count=N, compress = 'lzw', dtype='int16')
-# dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'w', **profile, BIGTIFF='YES')
+N = len(band_names)
+profile.update(count=N, compress = 'lzw', dtype='int16')
+dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'w', **profile, BIGTIFF='YES')
+
+# NEW
 # dst.write(array, indexes=1)
 # for i in range(N):
 #     dst.set_band_description(i+1, band_names[i])
-#
 # dst.close()
 
-src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params_old.tif')
-dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'r+')
+# UPDATE
+worldcover = rasterio.open('/Volumes/Data/Spatial/LandCover/WorldCover/worldcover.tif')
+src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params_archive.tif')
+for i in range(N-1):
+    array = src.read(i+1).astype('int16')
+    dst.write(array, indexes=i+1)
+    dst.set_band_description(i+1, band_names[i])
+array = worldcover.read(1).astype('int16')
+dst.write(array, indexes=N)
+dst.set_band_description(N, band_names[N-1])
 
-height = src.read(1).astype('int16')
+worldcover.close()
 
-for i in range(2, 4):
+# SET MINUS
 
-    array = src.read(i).astype('int16')
-    array[array == 0] = -1
-    array[height > 0] = -1
-
-    dst.write(array, indexes=i)
+# src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params_old.tif')
+# dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'r+')
+#
+# height = src.read(1).astype('int16')
+#
+# for i in range(2, 4):
+#
+#     array = src.read(i).astype('int16')
+#     array[array == 0] = -1
+#     array[height > 0] = -1
+#
+#     dst.write(array, indexes=i)
 
 src.close()
 dst.close()

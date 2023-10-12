@@ -71,7 +71,7 @@ industrial:
     - retail
     - depot
     - commercial
-residential
+residential:
   - LANDUSE:
     - residential
     - allotments
