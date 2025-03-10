@@ -17,6 +17,8 @@ title = [
     'CANYON LENGTH PARAMETERS'
 ]
 
+с
+
 for t in range(1, 2):
 
     tiles = np.load(tilesets[t])
@@ -42,30 +44,30 @@ for t in range(1, 2):
             col1 = tiles[i, j, 2] - tiles[i, j, 6]
             col2 = tiles[i, j, 3] - tiles[i, j, 6]
 
-            dist_src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/distance.tif')
+            dist_src = rasterio.open(f'{wd}/distance.tif')
             distance = dist_src.read(1, window=win_read).astype('float64')
             dist_src.close()
 
-            alloc_src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/allocation.tif')
+            alloc_src = rasterio.open(f'{wd}/allocation.tif')
             allocation = alloc_src.read(1, window=win_read).astype('float64')
             alloc_src.close()
 
             if t == 0:
                 params = rs.euclidean_width_params_split(distance, allocation, 5.0, 3, 3)
 
-                dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'r+')
+                dst = rasterio.open(f'{wd}/params.tif', 'r+')
                 for k in range(2):
                     dst.write(params[k, row1:row2, col1:col2], indexes=k+2, window=win_write)
                 dst.close()
 
             else:
-                width_src = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params_old.tif')
+                width_src = rasterio.open(f'{wd}/params_old.tif')
                 width = width_src.read(2, window=win_read).astype('float64')
                 width_src.close()
 
                 params = rs.euclidean_length_params(distance, allocation, width,  1.0, 5000.0, 5.0)
 
-                dst = rasterio.open('/Volumes/Data/Spatial/OSM/CFO/2023-06-18/params.tif', 'r+')
+                dst = rasterio.open(f'{wd}/params.tif', 'r+')
                 for k in range(3):
                     dst.write(params[k, row1:row2, col1:col2], indexes=k+4, window=win_write)
                 dst.close()

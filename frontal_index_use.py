@@ -12,8 +12,8 @@ array = src.read(1).astype('float64')
 
 flt = True
 
-subarray = array[485:555, 610:680] # XO SHI MIN
-# subarray = array[340:410, 475:545] # FIAN
+# subarray = array[485:555, 610:680] # XO SHI MIN
+subarray = array[340:410, 475:545] # FIAN
 
 if flt:
     mask = np.fromfunction(lambda i, j: abs(i-35) + abs(j-35) >= 35, subarray.shape, dtype=int)
@@ -31,6 +31,8 @@ for a in seq:
     FAIS.append(fi.fai_walls(subarray, a, cellsize=5.0))
 
 pyplot.imshow(subarray, cmap='bone')
+pyplot.title('Высота здания, [м]')
+pyplot.colorbar()
 pyplot.show()
 
 # pyplot.imshow(fi.mark_objects(subarray), cmap='bone')
@@ -46,5 +48,7 @@ ax.plot(seq, FAIS, label='FAI walls')
 ax.plot(seq, FAI, label='FAI buildings')
 ax.plot(seq, FAIB, label='FAI blocking')
 ax.set_ylim(bottom=0)
+pyplot.xlabel("Направление ветра, [°]")
 ax.legend()
+pyplot.title('Фронтальный индекс')
 pyplot.show()
