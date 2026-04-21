@@ -63,7 +63,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                             z2 = distance[[y, x]];
 
-                            if z2 != f64::NAN {
+                            if !f64::is_nan(z2) {
                                 h = match i {
                                     0 => 2.0 *  rx[[y, x]] + 1.0,
                                     1 => 2.0 * (rx[[y, x]] + ry[[y, x]] + 1.0),
@@ -107,7 +107,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
 
                             z2 = distance[[y, x]];
 
-                            if z2 != f64::NAN {
+                            if !f64::is_nan(z2) {
                                 h = match i {
                                     4 => 2.0 *  rx[[y, x]] + 1.0,
                                     5 => 2.0 * (rx[[y, x]] + ry[[y, x]] + 1.0),
@@ -192,7 +192,7 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
                             uik = ik as usize;
                             ujk = jk as usize;
 
-                            if input_ref[[i, j]] != f64::NAN {
+                            if !f64::is_nan(input_ref[[i, j]]) {
                                 if input_ref[[i, j]] != input_ref[[uik, ujk]] {
                                     data[j] = 1.0;
                                     break;
@@ -1014,7 +1014,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
     }
 
     // possible numbers for discr: 1, 2, 3, 4, 5, 6, 9, 10, 12, 15, 18, 20, 30, 36, 45, 60, 90
-    fn euclidean_length_params(distance: ArrayView2<'_, f64>, height: ArrayView2<'_, f64>, width: ArrayView2<'_, f64>, discr: f64, radius: f64, cellsize: f64) -> Array3<f64> {
+    fn euclidean_length_params(distance: ArrayView2<'_, f64>, 
+                               height: ArrayView2<'_, f64>, 
+                               width: ArrayView2<'_, f64>, 
+                               discr: f64, 
+                               radius: f64, 
+                               cellsize: f64) -> Array3<f64> {
         let shape = distance.raw_dim();
         let nrow = shape[0];
         let ncol = shape[1];
