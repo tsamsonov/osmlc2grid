@@ -17,8 +17,6 @@ title = [
     'CANYON LENGTH PARAMETERS'
 ]
 
-с
-
 for t in range(1, 2):
 
     tiles = np.load(tilesets[t])

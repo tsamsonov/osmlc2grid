@@ -1054,7 +1054,12 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
         let proc_dirs = ndirs / (2 * nproc);
 
         let mut dir1 = 0_usize;
-        let mut dir2 = proc_dirs + ndirs % (2 * nproc);
+        let mut dir2 = proc_dirs + (ndirs / 2) % nproc;
+        // let mut dir2 = proc_dirs + ndirs % (2 * nproc);
+        // let mut dir2 = ndirs - proc_dirs * (ndirs/2-1);
+
+        // println!("ndirs = {}, nproc = {}, proc_dirs = {}", 
+        //         ndirs, nproc, proc_dirs);
 
         for proc in 0..nproc {
             let distance_ref = arcdistance.clone();
@@ -1066,6 +1071,8 @@ fn rasterspace(_py: Python<'_>, m: &PyModule) -> PyResult<()>
             tasks.push(thread::spawn(move || {
                 main_dir_params(distance_ref.view(), height_ref.view(), width_ref.view(), &shifts_ref, dir1, dir2, cellsize, &bars_clone[proc])
             }));
+
+            // println!("Proc {}: {} — {}", proc, dir1, dir2);
 
             dir1 = dir2;
             dir2 += proc_dirs;
